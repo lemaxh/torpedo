@@ -17,38 +17,65 @@ canvasContainer.appendChild(renderer.domElement);
 const gridHelper = new THREE.GridHelper(60, 60, 0x00ff00, 0x003300);
 scene.add(gridHelper);
 
+// --- ÚJ: FÉNYFORRÁSOK ---
+// A szürke modellek megvilágításához elengedhetetlen, különben teljesen sötétek lennének
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Alapvető derítés mindenhonnan
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Fentről jövő "napfény"
+directionalLight.position.set(10, 20, 10);
+scene.add(directionalLight);
+
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
 const planeIntersect = new THREE.Vector3();
 
-// --- 3D MODELLEK BETÖLTÉSE (GLTFLoader) ---
+/**
+ * --- 3D MODELLEK BETÖLTÉSE (GLTFLoader) ---
+ */
 const loader = new THREE.GLTFLoader();
 
-// Itt adjuk meg a fájljaid pontos nevét a megfelelő sorrendben
+// Frissített fájlnevek a te listád alapján
 const shipFiles = [
     '2helyes.glb',
     '3helyes1.glb',
     '3helyes2.glb',
     '4helyes.glb',
-    '5helyes_lenti.glb'
+    '5helyes.glb'
 ];
 
-let loadedModels = []; // Ide mentjük a betöltött, szilárd modelleket
-let currentShipIndex = 0; // Melyik hajót pakoljuk éppen?
-const SHIP_SCALE = 1.0; // Állítsd át (pl. 0.5 vagy 2.0), ha a modellek mérete nem jó
+let loadedModels = []; 
+let currentShipIndex = 0; 
 
-// A Szellemhajó most már egy üres "tároló" (Group), amibe mindig beletesszük az aktuális 3D modellt
+// --- MÉRETEZÉS ---
+// Itt tudod finomhangolni a méretet (pl. 0.3 még kisebb, 0.8 nagyobb)
+const SHIP_SCALE = 0.5; 
+
 const ghostShip = new THREE.Group();
 ghostShip.visible = false;
 scene.add(ghostShip);
 
-// Betöltjük a hajókat a háttérben
+// Modellek letöltése és átszínezése
 Promise.all(shipFiles.map(file => {
     return new Promise((resolve, reject) => {
         loader.load(file, (gltf) => {
             const model = gltf.scene;
+            
+            // Méret beállítása
             model.scale.set(SHIP_SCALE, SHIP_SCALE, SHIP_SCALE);
+            
+            // --- SZÍN FELÜLÍRÁSA SZÜRKÉRE ---
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.material = new THREE.MeshStandardMaterial({ 
+                        color: 0x888888, // Egységes szürke
+                        roughness: 0.6,  // Kicsit matt felület
+                        metalness: 0.3   // Enyhe fémes hatás
+                    });
+                }
+            });
+
             resolve(model);
         }, undefined, (error) => {
             console.error('Hiba a modell betöltésekor:', file, error);
@@ -56,28 +83,25 @@ Promise.all(shipFiles.map(file => {
     });
 })).then(models => {
     loadedModels = models;
-    console.log("Minden hajómodell sikeresen betöltve!");
-    updateGhostShip(); // Beállítjuk az első hajót az egérhez
+    console.log("Minden hajómodell sikeresen betöltve és átszínezve!");
+    updateGhostShip(); 
 });
 
-// Ez a függvény cseréli a szellemhajót a következő modellre
 function updateGhostShip() {
-    // Kitöröljük az előző szellemhajót a tárolóból
     while(ghostShip.children.length > 0){ 
         ghostShip.remove(ghostShip.children[0]); 
     }
     
     if(currentShipIndex < loadedModels.length) {
-        // Lemásoljuk a betöltött szilárd modellt
         const modelClone = loadedModels[currentShipIndex].clone();
         
-        // Végigmegyünk a modell részein, és áttetszővé (szellemmé) tesszük őket
+        // A szellemhajónál a szürke anyagot áttetsző kékké alakítjuk
         modelClone.traverse((child) => {
             if (child.isMesh) {
-                child.material = child.material.clone(); // Klónozzuk, hogy ne rontsuk el az eredetit
+                child.material = child.material.clone();
                 child.material.transparent = true;
                 child.material.opacity = 0.5;
-                child.material.color.setHex(0x00ffff); // Kékes neon szín a tervezéshez
+                child.material.color.setHex(0x00ffff);
             }
         });
         
@@ -85,7 +109,7 @@ function updateGhostShip() {
     }
 }
 
-// Célkereszt (Játék fázishoz)
+// Célkereszt
 const targetGeometry = new THREE.RingGeometry(0.4, 0.8, 16);
 const targetMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
 const targetReticle = new THREE.Mesh(targetGeometry, targetMaterial);
@@ -151,8 +175,6 @@ window.addEventListener('mousemove', (event) => {
     if (isPlanningPhase) {
         ghostShip.position.x = Math.round(planeIntersect.x);
         ghostShip.position.z = Math.round(planeIntersect.z);
-        // Ha a modell origója a közepén van, esetleg feljebb kell emelni. 
-        // Most maradjunk a nulla szintnél.
         ghostShip.position.y = 0; 
     } else if (isPlayingPhase) {
         targetReticle.position.x = Math.round(planeIntersect.x);
@@ -170,13 +192,11 @@ window.addEventListener('click', (event) => {
     if (event.target !== renderer.domElement) return;
 
     if (isPlanningPhase && currentShipIndex < maxShips) {
-        // 1. Lemásoljuk és lerakjuk az eredeti, SZILÁRD textúrájú modellt
         const solidShip = loadedModels[currentShipIndex].clone();
         solidShip.position.copy(ghostShip.position);
         solidShip.rotation.copy(ghostShip.rotation);
         scene.add(solidShip);
         
-        // 2. Elmentjük az adatokat a szerver számára
         placedShips.push({ 
             id: shipFiles[currentShipIndex],
             x: solidShip.position.x, 
@@ -184,7 +204,6 @@ window.addEventListener('click', (event) => {
             rotationY: solidShip.rotation.y 
         });
         
-        // 3. Lépünk a következő hajóra
         currentShipIndex++;
         shipCountSpan.innerText = currentShipIndex;
         
@@ -193,7 +212,6 @@ window.addEventListener('click', (event) => {
             readyBtn.disabled = false;
             readyBtn.style.background = "#005500";
         } else {
-            // Betöltjük a következő hajó szellemképét
             updateGhostShip();
         }
     } else if (isPlayingPhase) {
@@ -238,13 +256,11 @@ socket.on('game_start', (msg) => {
     lobbyArea.style.display = 'none';
     planningArea.style.display = 'block';
     
-    // Csak akkor indítjuk a pakolást, ha a hajók már betöltöttek
     if (loadedModels.length > 0) {
         isPlanningPhase = true;
         ghostShip.visible = true;
     } else {
         logMessage("⚠️ Várj egy picit, a hajómodellek még töltenek...", "system");
-        // Egy kis időzítő, ami megvárja a betöltést
         const waitInterval = setInterval(() => {
             if (loadedModels.length > 0) {
                 clearInterval(waitInterval);
