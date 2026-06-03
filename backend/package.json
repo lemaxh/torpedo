@@ -1,1 +1,13 @@
-a
+{
+  "name": "torpedo-backend",
+  "version": "1.0.0",
+  "description": "Backend for 3D Torpedo game",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
