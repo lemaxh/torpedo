@@ -2,21 +2,21 @@
 <html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <title>3D Torpedó Teszt</title>
+    <title>3D Torpedó</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: #0f0; font-family: monospace; }
-        
-        /* A 3D háttér tárolója */
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
-        
-        /* Az UI elemeket egy áttetsző panelre tesszük */
-        #ui-layer { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); padding: 20px; border: 1px solid #0f0; max-height: 90vh; overflow-y: auto; }
-        
-        button, input { padding: 10px; font-size: 16px; margin: 5px 0; background: #222; color: #0f0; border: 1px solid #0f0; font-family: monospace; }
+        #ui-layer { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); padding: 20px; border: 1px solid #0f0; max-height: 90vh; overflow-y: auto; width: 350px; }
+        button, input { padding: 10px; font-size: 16px; margin: 5px 0; background: #222; color: #0f0; border: 1px solid #0f0; font-family: monospace; width: 100%; }
         button:hover { background: #333; cursor: pointer; }
-        #radar-log { margin-top: 20px; border-top: 1px solid #333; padding-top: 10px; }
+        button:disabled { background: #111; color: #555; border-color: #555; cursor: not-allowed; }
+        #radar-log { margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 10px; height: 150px; overflow-y: auto; }
         .enemy { color: #f55; }
         .system { color: #aaa; }
+        
+        /* Új elemek a tervezési fázishoz */
+        #planning-area { display: none; margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 20px; }
+        .instruction { color: #0ff; font-size: 0.9em; margin-bottom: 15px; }
         #game-area { display: none; margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 20px; }
     </style>
 </head>
@@ -24,18 +24,29 @@
     <div id="canvas-container"></div>
 
     <div id="ui-layer">
-        <h2>🚀 Torpedó Radar (Lobby)</h2>
+        <h2>🚀 Torpedó Parancsnokság</h2>
         
         <div id="lobby-area">
-            <button id="createRoomBtn">Új szoba létrehozása (Host)</button><br><br>
-            <input type="text" id="roomCodeInput" placeholder="Ide írd a kódot..." maxlength="5">
+            <button id="createRoomBtn">Új szoba létrehozása (Host)</button>
+            <input type="text" id="roomCodeInput" placeholder="Ide írd a kódot..." maxlength="5" style="text-align: center;">
             <button id="joinRoomBtn">Csatlakozás</button>
-            <h3 id="status-display" style="color: yellow;"></h3>
+            <h3 id="status-display" style="color: yellow; text-align: center;"></h3>
+        </div>
+
+        <div id="planning-area">
+            <h3 style="color: #0ff;">🛠️ Flotta elhelyezése</h3>
+            <div class="instruction">
+                Egér: Mozgatás a rácson<br>
+                Bal klikk: Hajó lerakása<br>
+                'R' gomb: Forgatás (Ferdén is!)
+            </div>
+            <p>Lerakott hajók: <span id="ship-count">0</span> / 5</p>
+            <button id="readyBtn" disabled>Kész vagyok a pakolással!</button>
         </div>
 
         <div id="game-area">
-            <h3>Játékosok összekapcsolva!</h3>
-            <button id="fireBtn">Véletlenszerű Lövés a Ködbe</button>
+            <h3 style="color: #f55;">🔥 Harckészültség!</h3>
+            <button id="fireBtn">Tűz a kijelölt célpontra!</button>
         </div>
 
         <div id="radar-log"></div>
@@ -43,7 +54,6 @@
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
     <script src="main.js"></script>
 </body>
 </html>
