@@ -17,12 +17,11 @@ canvasContainer.appendChild(renderer.domElement);
 const gridHelper = new THREE.GridHelper(60, 60, 0x00ff00, 0x003300);
 scene.add(gridHelper);
 
-// --- ÚJ: FÉNYFORRÁSOK ---
-// A szürke modellek megvilágításához elengedhetetlen, különben teljesen sötétek lennének
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Alapvető derítés mindenhonnan
+// Fényforrások a modellek árnyékolásához
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Fentről jövő "napfény"
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); 
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
@@ -32,58 +31,63 @@ const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const planeIntersect = new THREE.Vector3();
 
 /**
- * --- 3D MODELLEK BETÖLTÉSE (GLTFLoader) ---
+ * --- 3D MODELLEK EGYEDI BEÁLLÍTÁSAI ---
  */
 const loader = new THREE.GLTFLoader();
 
-// Frissített fájlnevek a te listád alapján
-const shipFiles = [
-    '2helyes.glb',
-    '3helyes1.glb',
-    '3helyes2.glb',
-    '4helyes.glb',
-    '5helyes.glb'
+// A te általad kalibrált, tökéletesített beállítások!
+const shipConfig = [
+    { file: '2helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 0.6, posY: 1.2, posZ: 4.5 },
+    { file: '3helyes1.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: 2.7 },
+    { file: '3helyes2.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: -3.4 },
+    { file: '4helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 2.0, posY: 1.2, posZ: -1.8 },
+    { file: '5helyes.glb', scale: 0.10, rotX: 0, rotY: 0, rotZ: 0, posX: 2.4, posY: 1.2, posZ: 0.3 }
 ];
 
 let loadedModels = []; 
 let currentShipIndex = 0; 
 
-// --- MÉRETEZÉS ---
-// Itt tudod finomhangolni a méretet (pl. 0.3 még kisebb, 0.8 nagyobb)
-const SHIP_SCALE = 0.5; 
-
 const ghostShip = new THREE.Group();
 ghostShip.visible = false;
 scene.add(ghostShip);
 
-// Modellek letöltése és átszínezése
-Promise.all(shipFiles.map(file => {
+Promise.all(shipConfig.map(config => {
     return new Promise((resolve, reject) => {
-        loader.load(file, (gltf) => {
+        loader.load(config.file, (gltf) => {
             const model = gltf.scene;
             
-            // Méret beállítása
-            model.scale.set(SHIP_SCALE, SHIP_SCALE, SHIP_SCALE);
+            // 1. Méret alkalmazása
+            model.scale.set(config.scale, config.scale, config.scale);
             
-            // --- SZÍN FELÜLÍRÁSA SZÜRKÉRE ---
+            // 2. Kezdő forgatás alkalmazása
+            model.rotation.set(config.rotX, config.rotY, config.rotZ);
+            
+            // 3. Eltolás (Origin korrekció) alkalmazása
+            model.position.set(config.posX, config.posY, config.posZ);
+            
+            // Szürke fém textúra ráhúzása
             model.traverse((child) => {
                 if (child.isMesh) {
                     child.material = new THREE.MeshStandardMaterial({ 
-                        color: 0x888888, // Egységes szürke
-                        roughness: 0.6,  // Kicsit matt felület
-                        metalness: 0.3   // Enyhe fémes hatás
+                        color: 0x888888, 
+                        roughness: 0.6,  
+                        metalness: 0.3   
                     });
                 }
             });
 
-            resolve(model);
+            // Biztonsági csomagolás, hogy az R gombos forgatás ne akadjon össze az alapforgatással
+            const wrapper = new THREE.Group();
+            wrapper.add(model);
+            
+            resolve(wrapper);
         }, undefined, (error) => {
-            console.error('Hiba a modell betöltésekor:', file, error);
+            console.error('Hiba a modell betöltésekor:', config.file, error);
         });
     });
 })).then(models => {
     loadedModels = models;
-    console.log("Minden hajómodell sikeresen betöltve és átszínezve!");
+    console.log("Minden hajómodell sikeresen betöltve a kalibrált értékekkel!");
     updateGhostShip(); 
 });
 
@@ -95,7 +99,7 @@ function updateGhostShip() {
     if(currentShipIndex < loadedModels.length) {
         const modelClone = loadedModels[currentShipIndex].clone();
         
-        // A szellemhajónál a szürke anyagot áttetsző kékké alakítjuk
+        // Szellemhajó kékes-áttetsző anyaga
         modelClone.traverse((child) => {
             if (child.isMesh) {
                 child.material = child.material.clone();
@@ -135,7 +139,6 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-
 /**
  * --- 2. HÁLÓZAT ÉS FELÜLET (Socket.io & UI) ---
  */
@@ -158,7 +161,6 @@ function logMessage(msg, type = 'system') {
     p.className = type;
     logDiv.prepend(p);
 }
-
 
 /**
  * --- 3. JÁTÉKOS INTERAKCIÓK (Egér és Billentyűzet) ---
@@ -198,7 +200,7 @@ window.addEventListener('click', (event) => {
         scene.add(solidShip);
         
         placedShips.push({ 
-            id: shipFiles[currentShipIndex],
+            id: shipConfig[currentShipIndex].file,
             x: solidShip.position.x, 
             z: solidShip.position.z, 
             rotationY: solidShip.rotation.y 
@@ -224,7 +226,6 @@ window.addEventListener('click', (event) => {
         logMessage(`Tűz alá vetted a ${shotData.x}, ${shotData.z} koordinátát!`, 'system');
     }
 });
-
 
 /**
  * --- 4. GOMBOK ÉS HÁLÓZATI ESEMÉNYEK ---
