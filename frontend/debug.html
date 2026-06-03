@@ -6,14 +6,15 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #222; color: #fff; font-family: sans-serif; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
-        #controls { position: absolute; top: 20px; right: 20px; width: 350px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; border: 1px solid #555; }
+        #controls { position: absolute; top: 20px; right: 20px; width: 380px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; border: 1px solid #555; max-height: 90vh; overflow-y: auto; }
         h3 { margin-top: 0; color: #0ff; }
-        label { display: block; margin-top: 15px; font-weight: bold; }
+        label { display: block; margin-top: 15px; font-weight: bold; font-size: 13px; }
         input[type=range] { width: 100%; margin-top: 5px; }
         select { width: 100%; padding: 5px; margin-top: 5px; background: #333; color: white; border: 1px solid #777; }
         .val { color: #0ff; float: right; }
-        #code-output { background: #111; padding: 10px; border: 1px solid #0f0; color: #0f0; font-family: monospace; white-space: pre-wrap; margin-top: 20px; font-size: 12px; }
-        .help { font-size: 12px; color: #aaa; margin-top: 5px; margin-bottom: 15px; }
+        #code-output { background: #111; padding: 10px; border: 1px solid #0f0; color: #0f0; font-family: monospace; white-space: pre-wrap; margin-top: 20px; font-size: 11px; }
+        .help { font-size: 12px; color: #aaa; margin-top: 5px; margin-bottom: 5px; }
+        hr { border: 0; border-top: 1px solid #444; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -32,19 +33,31 @@
             <option value="4">5helyes.glb</option>
         </select>
 
-        <label>Méret (Scale): <span id="scaleVal" class="val">1.00</span></label>
+        <hr>
+        <label>MÉRET (Scale): <span id="scaleVal" class="val">1.00</span></label>
         <input type="range" id="scale" min="0.01" max="5" step="0.01" value="1">
 
-        <label>X Forgatás (Bólintás): <span id="rotXVal" class="val">0°</span></label>
+        <hr>
+        <div class="help"><b>FORGATÁS:</b> Állítsd be az alap irányt!</div>
+        <label>X (Bólintás): <span id="rotXVal" class="val">0°</span></label>
         <input type="range" id="rotX" min="-180" max="180" step="5" value="0">
 
-        <label>Y Forgatás (Irányék): <span id="rotYVal" class="val">0°</span></label>
+        <label>Y (Irányék): <span id="rotYVal" class="val">0°</span></label>
         <input type="range" id="rotY" min="-180" max="180" step="5" value="0">
 
-        <label>Z Forgatás (Dőlés): <span id="rotZVal" class="val">0°</span></label>
+        <label>Z (Dőlés): <span id="rotZVal" class="val">0°</span></label>
         <input type="range" id="rotZ" min="-180" max="180" step="5" value="0">
 
-        <div class="help">Tipp: A piros vonal az X, a zöld az Y (felfelé), a kék a Z tengely. A hajónak laposan kell feküdnie a rácson!</div>
+        <hr>
+        <div class="help"><b>ELTOLÁS (Origin korrekció):</b> Told a modellt a rács közepére!</div>
+        <label>X Pozíció (Piros tengely): <span id="posXVal" class="val">0.0</span></label>
+        <input type="range" id="posX" min="-10" max="10" step="0.1" value="0">
+
+        <label>Y Pozíció (Zöld tengely - Magasság): <span id="posYVal" class="val">0.0</span></label>
+        <input type="range" id="posY" min="-10" max="10" step="0.1" value="0">
+
+        <label>Z Pozíció (Kék tengely): <span id="posZVal" class="val">0.0</span></label>
+        <input type="range" id="posZ" min="-10" max="10" step="0.1" value="0">
 
         <label>Ezt másold a main.js-be:</label>
         <div id="code-output"></div>
@@ -57,7 +70,6 @@
         const canvasContainer = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         
-        // Kamera beállítása: közelebb, hogy jól lássuk a modellt
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(5, 5, 5); 
         camera.lookAt(0, 0, 0);
@@ -66,21 +78,22 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         canvasContainer.appendChild(renderer.domElement);
 
-        // Segédvonalak (Rács és Tengelyek)
         const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
         scene.add(gridHelper);
-        const axesHelper = new THREE.AxesHelper(3); // Piros=X, Zöld=Y, Kék=Z
+        const axesHelper = new THREE.AxesHelper(3); 
         scene.add(axesHelper);
 
-        // Fények
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1);
         dirLight.position.set(5, 10, 5);
         scene.add(dirLight);
 
-        // Modellek adatai és konfigurációja (Fokban tároljuk a könnyebb csúszkázás miatt)
         const shipFiles = ['2helyes.glb', '3helyes1.glb', '3helyes2.glb', '4helyes.glb', '5helyes.glb'];
-        const configs = shipFiles.map(file => ({ file: file, scale: 1, rotX: 0, rotY: 0, rotZ: 0 }));
+        
+        // ÚJ: A konfig most már tartalmazza a pozíciókat (posX, posY, posZ) is!
+        const configs = shipFiles.map(file => ({ 
+            file: file, scale: 1, rotX: 0, rotY: 0, rotZ: 0, posX: 0, posY: 0, posZ: 0 
+        }));
         
         const loader = new THREE.GLTFLoader();
         let loadedModels = [];
@@ -89,26 +102,21 @@
         // UI Elemek
         const selectEl = document.getElementById('shipSelect');
         const scaleEl = document.getElementById('scale');
-        const rotXEl = document.getElementById('rotX');
-        const rotYEl = document.getElementById('rotY');
-        const rotZEl = document.getElementById('rotZ');
+        const rotXEl = document.getElementById('rotX'), rotYEl = document.getElementById('rotY'), rotZEl = document.getElementById('rotZ');
+        const posXEl = document.getElementById('posX'), posYEl = document.getElementById('posY'), posZEl = document.getElementById('posZ');
         
         const scaleVal = document.getElementById('scaleVal');
-        const rotXVal = document.getElementById('rotXVal');
-        const rotYVal = document.getElementById('rotYVal');
-        const rotZVal = document.getElementById('rotZVal');
+        const rotXVal = document.getElementById('rotXVal'), rotYVal = document.getElementById('rotYVal'), rotZVal = document.getElementById('rotZVal');
+        const posXVal = document.getElementById('posXVal'), posYVal = document.getElementById('posYVal'), posZVal = document.getElementById('posZVal');
+        
         const codeOutput = document.getElementById('code-output');
 
-        // Fájlok betöltése
         Promise.all(shipFiles.map(file => {
             return new Promise(resolve => {
                 loader.load(file, (gltf) => {
                     const model = gltf.scene;
-                    // Szürke fém anyag ráhúzása
                     model.traverse((child) => {
-                        if (child.isMesh) {
-                            child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
-                        }
+                        if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
                     });
                     resolve(model);
                 });
@@ -118,85 +126,72 @@
             displayModel(0);
         });
 
-        // Modell megjelenítése a színtéren
         function displayModel(index) {
             if (currentModelMesh) scene.remove(currentModelMesh);
             
             currentModelMesh = loadedModels[index];
             scene.add(currentModelMesh);
             
-            // UI csúszkák beállítása az elmentett config alapján
             const cfg = configs[index];
             scaleEl.value = cfg.scale;
-            rotXEl.value = cfg.rotX;
-            rotYEl.value = cfg.rotY;
-            rotZEl.value = cfg.rotZ;
+            rotXEl.value = cfg.rotX; rotYEl.value = cfg.rotY; rotZEl.value = cfg.rotZ;
+            posXEl.value = cfg.posX; posYEl.value = cfg.posY; posZEl.value = cfg.posZ;
             
             applyTransformations();
         }
 
-        // Értékek alkalmazása a 3D modellen
         function applyTransformations() {
             if (!currentModelMesh) return;
             
             const index = selectEl.value;
             const cfg = configs[index];
             
-            // Frissítjük a memóriában lévő konfigot
             cfg.scale = parseFloat(scaleEl.value);
-            cfg.rotX = parseInt(rotXEl.value);
-            cfg.rotY = parseInt(rotYEl.value);
-            cfg.rotZ = parseInt(rotZEl.value);
+            cfg.rotX = parseInt(rotXEl.value); cfg.rotY = parseInt(rotYEl.value); cfg.rotZ = parseInt(rotZEl.value);
+            cfg.posX = parseFloat(posXEl.value); cfg.posY = parseFloat(posYEl.value); cfg.posZ = parseFloat(posZEl.value);
 
-            // Frissítjük a UI szövegeket
             scaleVal.innerText = cfg.scale.toFixed(2);
-            rotXVal.innerText = cfg.rotX + '°';
-            rotYVal.innerText = cfg.rotY + '°';
-            rotZVal.innerText = cfg.rotZ + '°';
+            rotXVal.innerText = cfg.rotX + '°'; rotYVal.innerText = cfg.rotY + '°'; rotZVal.innerText = cfg.rotZ + '°';
+            posXVal.innerText = cfg.posX.toFixed(1); posYVal.innerText = cfg.posY.toFixed(1); posZVal.innerText = cfg.posZ.toFixed(1);
 
-            // Three.js transzformációk (Fok -> Radián)
             currentModelMesh.scale.set(cfg.scale, cfg.scale, cfg.scale);
             currentModelMesh.rotation.set(
                 THREE.MathUtils.degToRad(cfg.rotX),
                 THREE.MathUtils.degToRad(cfg.rotY),
                 THREE.MathUtils.degToRad(cfg.rotZ)
             );
+            // ÚJ: Eltoljuk a modellt a térben
+            currentModelMesh.position.set(cfg.posX, cfg.posY, cfg.posZ);
 
             generateCode();
         }
 
-        // Kódgenerátor
         function generateCode() {
             let code = `const shipConfig = [\n`;
             configs.forEach((c, i) => {
                 const isLast = i === configs.length - 1;
-                // Formulázzuk a radián számítást a main.js számára
-                let rx = c.rotX === 0 ? "0" : `Math.PI * (${c.rotX} / 180)`;
-                let ry = c.rotY === 0 ? "0" : `Math.PI * (${c.rotY} / 180)`;
-                let rz = c.rotZ === 0 ? "0" : `Math.PI * (${c.rotZ} / 180)`;
+                let rx = c.rotX === 0 ? "0" : `Math.PI * (${c.rotX}/180)`;
+                let ry = c.rotY === 0 ? "0" : `Math.PI * (${c.rotY}/180)`;
+                let rz = c.rotZ === 0 ? "0" : `Math.PI * (${c.rotZ}/180)`;
                 
-                code += `    { file: '${c.file}', scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz} }${isLast ? '' : ','}\n`;
+                // Formázzuk a kimenetet, hogy tartalmazza az X, Y, Z pozíciókat is
+                code += `    { file: '${c.file}', scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz}, posX: ${c.posX.toFixed(1)}, posY: ${c.posY.toFixed(1)}, posZ: ${c.posZ.toFixed(1)} }${isLast ? '' : ','}\n`;
             });
             code += `];`;
             codeOutput.innerText = code;
         }
 
-        // Eseményfigyelők
         selectEl.addEventListener('change', (e) => displayModel(e.target.value));
         scaleEl.addEventListener('input', applyTransformations);
-        rotXEl.addEventListener('input', applyTransformations);
-        rotYEl.addEventListener('input', applyTransformations);
-        rotZEl.addEventListener('input', applyTransformations);
+        rotXEl.addEventListener('input', applyTransformations); rotYEl.addEventListener('input', applyTransformations); rotZEl.addEventListener('input', applyTransformations);
+        posXEl.addEventListener('input', applyTransformations); posYEl.addEventListener('input', applyTransformations); posZEl.addEventListener('input', applyTransformations);
 
-        // Animáció és Kamera mozgás
         function animate() {
             requestAnimationFrame(animate);
-            // Lassan forgatjuk a kamerát a középpont körül, hogy minden szögből lássuk
             const timer = Date.now() * 0.0005;
             camera.position.x = Math.cos(timer) * 8;
             camera.position.z = Math.sin(timer) * 8;
             camera.lookAt(0, 0, 0);
-            
             renderer.render(scene, camera);
         }
         animate();
