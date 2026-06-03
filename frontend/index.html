@@ -4,36 +4,46 @@
     <meta charset="UTF-8">
     <title>3D Torpedó Teszt</title>
     <style>
-        body { margin: 0; background-color: #111; color: #0f0; font-family: monospace; padding: 20px; }
-        button, input { padding: 10px; font-size: 16px; margin: 5px 0; background: #222; color: #0f0; border: 1px solid #0f0; font-family: monospace;}
+        body { margin: 0; overflow: hidden; background-color: #111; color: #0f0; font-family: monospace; }
+        
+        /* A 3D háttér tárolója */
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        
+        /* Az UI elemeket egy áttetsző panelre tesszük */
+        #ui-layer { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); padding: 20px; border: 1px solid #0f0; max-height: 90vh; overflow-y: auto; }
+        
+        button, input { padding: 10px; font-size: 16px; margin: 5px 0; background: #222; color: #0f0; border: 1px solid #0f0; font-family: monospace; }
         button:hover { background: #333; cursor: pointer; }
-        #radar-log { margin-top: 20px; border: 1px solid #333; padding: 10px; height: 300px; overflow-y: auto; }
+        #radar-log { margin-top: 20px; border-top: 1px solid #333; padding-top: 10px; }
         .enemy { color: #f55; }
         .system { color: #aaa; }
-        
-        /* Kezdetben elrejtjük a játéktér gombját */
         #game-area { display: none; margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 20px; }
     </style>
 </head>
 <body>
-    <h2>🚀 Torpedó Radar (Lobby)</h2>
-    
-    <div id="lobby-area">
-        <button id="createRoomBtn">Új szoba létrehozása (Host)</button>
-        <br><br>
-        <input type="text" id="roomCodeInput" placeholder="Ide írd a kódot..." maxlength="5">
-        <button id="joinRoomBtn">Csatlakozás szobához</button>
-        <h3 id="status-display" style="color: yellow;"></h3>
-    </div>
+    <div id="canvas-container"></div>
 
-    <div id="game-area">
-        <h3>Játékosok összekapcsolva!</h3>
-        <button id="fireBtn">Véletlenszerű Lövés Indítása</button>
-    </div>
+    <div id="ui-layer">
+        <h2>🚀 Torpedó Radar (Lobby)</h2>
+        
+        <div id="lobby-area">
+            <button id="createRoomBtn">Új szoba létrehozása (Host)</button><br><br>
+            <input type="text" id="roomCodeInput" placeholder="Ide írd a kódot..." maxlength="5">
+            <button id="joinRoomBtn">Csatlakozás</button>
+            <h3 id="status-display" style="color: yellow;"></h3>
+        </div>
 
-    <div id="radar-log"></div>
+        <div id="game-area">
+            <h3>Játékosok összekapcsolva!</h3>
+            <button id="fireBtn">Véletlenszerű Lövés a Ködbe</button>
+        </div>
+
+        <div id="radar-log"></div>
+    </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
     <script src="main.js"></script>
 </body>
 </html>
