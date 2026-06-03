@@ -9,68 +9,113 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
+// Ez lesz a memóriabeli adatbázisunk, ami minden szobát nyilvántart
+const activeRooms = {};
+
+// 1. Alap végpont a "kíváncsiskodóknak"
 app.get('/', (req, res) => {
   res.send('A 3D Torpedó szerver hibátlanul fut és várja a játékosokat!');
 });
 
+// 2. A Monitor Végpont (Admin Dashboard)
+app.get('/monitor', (req, res) => {
+  let html = `
+    <!DOCTYPE html>
+    <html lang="hu">
+    <head>
+      <meta charset="UTF-8">
+      <title>Szerver Monitor</title>
+      <style>
+        body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
+        .room { border: 1px solid #333; margin-bottom: 15px; padding: 15px; background: #000; }
+        .waiting { color: #ff0; }
+        .planning { color: #0ff; }
+        .playing { color: #f55; }
+        h1 { border-bottom: 1px solid #0f0; padding-bottom: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>📡 Torpedó Szerver: Aktív Szobák</h1>
+  `;
+
+  const roomCodes = Object.keys(activeRooms);
+  
+  if (roomCodes.length === 0) {
+    html += `<p>Nincsenek aktív szobák jelenleg.</p>`;
+  } else {
+    roomCodes.forEach(code => {
+      const room = activeRooms[code];
+      html += `
+        <div class="room">
+          <strong>Szobakód:</strong> <span style="font-size: 1.2em;">${code}</span> <br><br>
+          <strong>Fázis:</strong> <span class="${room.status}">${room.status.toUpperCase()}</span> <br>
+          <strong>Játékosok:</strong> ${room.players.length} / 2 <br>
+          <strong>Leadott lövések:</strong> P1: ${room.p1_shots} db | P2: ${room.p2_shots} db
+        </div>
+      `;
+    });
+  }
+
+  html += `
+      <script>
+        // Az oldal 5 másodpercenként automatikusan frissíti magát
+        setTimeout(() => location.reload(), 5000);
+      </script>
+    </body></html>`;
+    
+  res.send(html);
+});
+
+// 3. Valós idejű Socket.IO kommunikáció és állapotkezelés
 io.on('connection', (socket) => {
   console.log('Új gép csatlakozott. ID:', socket.id);
-  let currentRoom = null; // Nyomon követjük, melyik szobában van a játékos
+  let currentRoom = null;
 
-  // 1. SZOBA LÉTREHOZÁSA (Host)
   socket.on('create_room', () => {
-    // Generálunk egy 5 karakteres véletlenszerű kódot (pl. "A8F2K")
     const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
     
-    socket.join(roomCode); // A szerveren berakjuk ezt a gépet a szobába
+    socket.join(roomCode);
     currentRoom = roomCode;
     
-    // Visszaküldjük a kódot a létrehozónak, hogy ki tudja írni a képernyőre
+    // Létrehozzuk a szobát a szerver memóriájában
+    activeRooms[roomCode] = {
+      status: 'waiting', // Várakozás a 2. játékosra
+      players: [socket.id],
+      p1_shots: 0,
+      p2_shots: 0
+    };
+    
     socket.emit('room_created', roomCode);
-    console.log(`Szoba létrehozva: ${roomCode}`);
   });
 
-  // 2. CSATLAKOZÁS SZOBAKÓDDAL (Vendég)
   socket.on('join_room', (roomCode) => {
-    // Megnézzük, létezik-e a szoba, és hányan vannak benne
-    const room = io.sockets.adapter.rooms.get(roomCode);
-    
-    if (room && room.size === 1) {
-      // Ha létezik és csak 1 ember van benne, csatlakozunk
+    if (activeRooms[roomCode] && activeRooms[roomCode].status === 'waiting') {
       socket.join(roomCode);
       currentRoom = roomCode;
       
-      // Szólunk a csatlakozónak, hogy sikerült
-      socket.emit('room_joined', roomCode);
+      // Frissítjük a memóriát: megvan a 2 ember, jöhet a hajó lepakolás
+      activeRooms[roomCode].players.push(socket.id);
+      activeRooms[roomCode].status = 'planning'; 
       
-      // Szólunk MINDENKINEK a szobában, hogy megvan a 2 ember, indulhat a játék
-      io.to(roomCode).emit('game_start', 'Megvan a kapcsolat! Indulhat a lövöldözés.');
-    } else if (room && room.size >= 2) {
-      socket.emit('error_msg', 'Ez a szoba már tele van!');
+      socket.emit('room_joined', roomCode);
+      io.to(roomCode).emit('game_start', 'Megvan a kapcsolat! Kezdődhet a hajók lepakolása (Tervezési fázis).');
     } else {
-      socket.emit('error_msg', 'Nincs ilyen kódú szoba!');
+      socket.emit('error_msg', 'Nincs ilyen kódú szoba, vagy már tele van!');
     }
   });
 
-  // 3. LÖVÉS (Már csak a szobán belül)
   socket.on('shoot', (data) => {
-    if (currentRoom) {
-      // A 'to(currentRoom)' biztosítja, hogy csak a szobatárs kapja meg
+    if (currentRoom && activeRooms[currentRoom]) {
+      const room = activeRooms[currentRoom];
+      
+      // Monitorozás: regisztráljuk, hogy ki lőtt (az 1-es vagy a 2-es játékos)
+      if (room.players[0] === socket.id) room.p1_shots++;
+      else room.p2_shots++;
+
+      // Továbbítjuk a lövést a szobán belül az ellenfélnek
       socket.to(currentRoom).emit('enemy_shot', data);
     }
   });
 
-  // 4. KILÉPÉS KEZELÉSE
   socket.on('disconnect', () => {
-    if (currentRoom) {
-      // Ha kilépett, szólunk a bent maradt játékosnak
-      socket.to(currentRoom).emit('enemy_disconnected', 'Az ellenfél kilépett / megszakadt a kapcsolata.');
-    }
-    console.log('Játékos lecsatlakozott:', socket.id);
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`A torpedó szerver aktív a ${PORT}-es porton!`);
-});
+    if (currentRoom && activeRooms[currentRoom]) {
