@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Torpedó Teszt</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: #0f0; font-family: monospace; padding: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
+        button:hover { background: #555; }
+        #radar-log { margin-top: 20px; border: 1px solid #333; padding: 10px; height: 300px; overflow-y: auto; }
+        .enemy { color: #f55; }
+    </style>
+</head>
+<body>
+    <h2>🚀 Torpedó Radar (Prototípus)</h2>
+    <button id="fireBtn">Véletlenszerű Lövés Indítása</button>
+    <div id="radar-log"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
