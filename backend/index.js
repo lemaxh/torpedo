@@ -4,7 +4,9 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-
+app.get('/', (req, res) => {
+  res.send('A 3D Torpedó szerver hibátlanul fut és várja a játékosokat!');
+});
 // A CORS engedélyezi, hogy a böngészőből (majd a frontendünkről) rá tudjunk csatlakozni
 const io = new Server(server, {
   cors: {
