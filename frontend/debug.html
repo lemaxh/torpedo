@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Hajó Kalibráló (Debug)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #222; color: #fff; font-family: sans-serif; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        #controls { position: absolute; top: 20px; right: 20px; width: 350px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; border: 1px solid #555; }
+        h3 { margin-top: 0; color: #0ff; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input[type=range] { width: 100%; margin-top: 5px; }
+        select { width: 100%; padding: 5px; margin-top: 5px; background: #333; color: white; border: 1px solid #777; }
+        .val { color: #0ff; float: right; }
+        #code-output { background: #111; padding: 10px; border: 1px solid #0f0; color: #0f0; font-family: monospace; white-space: pre-wrap; margin-top: 20px; font-size: 12px; }
+        .help { font-size: 12px; color: #aaa; margin-top: 5px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <h3>🛠️ Hajó Kalibráló</h3>
+        
+        <label>Kiválasztott modell:</label>
+        <select id="shipSelect">
+            <option value="0">2helyes.glb</option>
+            <option value="1">3helyes1.glb</option>
+            <option value="2">3helyes2.glb</option>
+            <option value="3">4helyes.glb</option>
+            <option value="4">5helyes.glb</option>
+        </select>
+
+        <label>Méret (Scale): <span id="scaleVal" class="val">1.00</span></label>
+        <input type="range" id="scale" min="0.01" max="5" step="0.01" value="1">
+
+        <label>X Forgatás (Bólintás): <span id="rotXVal" class="val">0°</span></label>
+        <input type="range" id="rotX" min="-180" max="180" step="5" value="0">
+
+        <label>Y Forgatás (Irányék): <span id="rotYVal" class="val">0°</span></label>
+        <input type="range" id="rotY" min="-180" max="180" step="5" value="0">
+
+        <label>Z Forgatás (Dőlés): <span id="rotZVal" class="val">0°</span></label>
+        <input type="range" id="rotZ" min="-180" max="180" step="5" value="0">
+
+        <div class="help">Tipp: A piros vonal az X, a zöld az Y (felfelé), a kék a Z tengely. A hajónak laposan kell feküdnie a rácson!</div>
+
+        <label>Ezt másold a main.js-be:</label>
+        <div id="code-output"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <script>
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        // Kamera beállítása: közelebb, hogy jól lássuk a modellt
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(5, 5, 5); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        // Segédvonalak (Rács és Tengelyek)
+        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(3); // Piros=X, Zöld=Y, Kék=Z
+        scene.add(axesHelper);
+
+        // Fények
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
+
+        // Modellek adatai és konfigurációja (Fokban tároljuk a könnyebb csúszkázás miatt)
+        const shipFiles = ['2helyes.glb', '3helyes1.glb', '3helyes2.glb', '4helyes.glb', '5helyes.glb'];
+        const configs = shipFiles.map(file => ({ file: file, scale: 1, rotX: 0, rotY: 0, rotZ: 0 }));
+        
+        const loader = new THREE.GLTFLoader();
+        let loadedModels = [];
+        let currentModelMesh = null;
+
+        // UI Elemek
+        const selectEl = document.getElementById('shipSelect');
+        const scaleEl = document.getElementById('scale');
+        const rotXEl = document.getElementById('rotX');
+        const rotYEl = document.getElementById('rotY');
+        const rotZEl = document.getElementById('rotZ');
+        
+        const scaleVal = document.getElementById('scaleVal');
+        const rotXVal = document.getElementById('rotXVal');
+        const rotYVal = document.getElementById('rotYVal');
+        const rotZVal = document.getElementById('rotZVal');
+        const codeOutput = document.getElementById('code-output');
+
+        // Fájlok betöltése
+        Promise.all(shipFiles.map(file => {
+            return new Promise(resolve => {
+                loader.load(file, (gltf) => {
+                    const model = gltf.scene;
+                    // Szürke fém anyag ráhúzása
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
+                        }
+                    });
+                    resolve(model);
+                });
+            });
+        })).then(models => {
+            loadedModels = models;
+            displayModel(0);
+        });
+
+        // Modell megjelenítése a színtéren
+        function displayModel(index) {
+            if (currentModelMesh) scene.remove(currentModelMesh);
+            
+            currentModelMesh = loadedModels[index];
+            scene.add(currentModelMesh);
+            
+            // UI csúszkák beállítása az elmentett config alapján
+            const cfg = configs[index];
+            scaleEl.value = cfg.scale;
+            rotXEl.value = cfg.rotX;
+            rotYEl.value = cfg.rotY;
+            rotZEl.value = cfg.rotZ;
+            
+            applyTransformations();
+        }
+
+        // Értékek alkalmazása a 3D modellen
+        function applyTransformations() {
+            if (!currentModelMesh) return;
+            
+            const index = selectEl.value;
+            const cfg = configs[index];
+            
+            // Frissítjük a memóriában lévő konfigot
+            cfg.scale = parseFloat(scaleEl.value);
+            cfg.rotX = parseInt(rotXEl.value);
+            cfg.rotY = parseInt(rotYEl.value);
+            cfg.rotZ = parseInt(rotZEl.value);
+
+            // Frissítjük a UI szövegeket
+            scaleVal.innerText = cfg.scale.toFixed(2);
+            rotXVal.innerText = cfg.rotX + '°';
+            rotYVal.innerText = cfg.rotY + '°';
+            rotZVal.innerText = cfg.rotZ + '°';
+
+            // Three.js transzformációk (Fok -> Radián)
+            currentModelMesh.scale.set(cfg.scale, cfg.scale, cfg.scale);
+            currentModelMesh.rotation.set(
+                THREE.MathUtils.degToRad(cfg.rotX),
+                THREE.MathUtils.degToRad(cfg.rotY),
+                THREE.MathUtils.degToRad(cfg.rotZ)
+            );
+
+            generateCode();
+        }
+
+        // Kódgenerátor
+        function generateCode() {
+            let code = `const shipConfig = [\n`;
+            configs.forEach((c, i) => {
+                const isLast = i === configs.length - 1;
+                // Formulázzuk a radián számítást a main.js számára
+                let rx = c.rotX === 0 ? "0" : `Math.PI * (${c.rotX} / 180)`;
+                let ry = c.rotY === 0 ? "0" : `Math.PI * (${c.rotY} / 180)`;
+                let rz = c.rotZ === 0 ? "0" : `Math.PI * (${c.rotZ} / 180)`;
+                
+                code += `    { file: '${c.file}', scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz} }${isLast ? '' : ','}\n`;
+            });
+            code += `];`;
+            codeOutput.innerText = code;
+        }
+
+        // Eseményfigyelők
+        selectEl.addEventListener('change', (e) => displayModel(e.target.value));
+        scaleEl.addEventListener('input', applyTransformations);
+        rotXEl.addEventListener('input', applyTransformations);
+        rotYEl.addEventListener('input', applyTransformations);
+        rotZEl.addEventListener('input', applyTransformations);
+
+        // Animáció és Kamera mozgás
+        function animate() {
+            requestAnimationFrame(animate);
+            // Lassan forgatjuk a kamerát a középpont körül, hogy minden szögből lássuk
+            const timer = Date.now() * 0.0005;
+            camera.position.x = Math.cos(timer) * 8;
+            camera.position.z = Math.sin(timer) * 8;
+            camera.lookAt(0, 0, 0);
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
