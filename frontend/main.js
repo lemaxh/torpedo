@@ -43,3 +43,13 @@ window.addEventListener('resize', () => {
 const socket = io('https://torpedo-xl5u.onrender.com');
 
 // ... (UI Elemek, Lobby logika, stb. maradnak pontosan úgy, ahogy eddig voltak) ...
+// Frissítsd ezt a blokkot a main.js alján:
+fireBtn.addEventListener('click', () => {
+    const shotData = { 
+        x: Math.floor(Math.random() * 60) - 30, // -30 és +30 közötti koordináta
+        y: 0, 
+        z: Math.floor(Math.random() * -30) - 5  // Direkt a távoli ködbe lövünk (negatív Z irány)
+    };
+    socket.emit('shoot', shotData);
+    logMessage(`Lövés leadva a ködbe: X:${shotData.x}, Z:${shotData.z}`, '');
+});
