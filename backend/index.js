@@ -119,3 +119,15 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (currentRoom && activeRooms[currentRoom]) {
+      socket.to(currentRoom).emit('enemy_disconnected', 'Az ellenfél kilépett.');
+      
+      // Ha valaki kilép, megsemmisítjük a szobát a memóriából
+      delete activeRooms[currentRoom];
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`A torpedó szerver aktív a ${PORT}-es porton!`);
+});
