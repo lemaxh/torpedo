@@ -103,7 +103,28 @@ io.on('connection', (socket) => {
       socket.emit('error_msg', 'Nincs ilyen kódú szoba, vagy már tele van!');
     }
   });
+// Ezt a join_room után, és a shoot elé illeszd be:
+  socket.on('ships_ready', (ships) => {
+    if (currentRoom && activeRooms[currentRoom]) {
+      const room = activeRooms[currentRoom];
+      
+      // Megnézzük, ki küldte a hajókat, és eltároljuk
+      if (room.players[0] === socket.id) {
+        room.p1_ready = true;
+        room.p1_ships = ships;
+      } else {
+        room.p2_ready = true;
+        room.p2_ships = ships;
+      }
 
+      // Ha mindkét játékos rányomott a kész gombra
+      if (room.p1_ready && room.p2_ready) {
+        room.status = 'playing';
+        // Szólunk mindkét gépnek, hogy indulhat a lövöldözés
+        io.to(currentRoom).emit('battle_begins', 'Mindkét flotta készen áll! Kezdődik a harc!');
+      }
+    }
+  });
   socket.on('shoot', (data) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
