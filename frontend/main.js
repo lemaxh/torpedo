@@ -21,7 +21,7 @@ renderer.setClearColor(0x111111);
 canvasContainer.appendChild(renderer.domElement);
 
 // --- ÚJ: Szabad kamera forgatás ---
-const controls = new OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls( camera, renderer.domElement );
 // Csak a jobb gombot és a görgőt engedjük a kamerának, hogy a bal klikk maradjon a játéknak!
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.enableDamping = true; 
