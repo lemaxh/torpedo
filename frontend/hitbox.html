@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Hitbox Illesztő (Logika vs Látvány)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: #fff; font-family: sans-serif; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        #controls { position: absolute; top: 10px; right: 10px; width: 400px; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 8px; border: 1px solid #0f0; max-height: 95vh; overflow-y: auto; }
+        h3 { margin-top: 0; color: #0f0; border-bottom: 1px solid #0f0; padding-bottom: 10px; }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 13px; color: #ddd; }
+        input[type=range] { width: 100%; margin-top: 5px; }
+        select { width: 100%; padding: 8px; margin-top: 5px; background: #222; color: #0f0; border: 1px solid #0f0; font-family: monospace; }
+        .val { color: #0ff; float: right; }
+        #code-output { background: #000; padding: 10px; border: 1px dashed #0f0; color: #0f0; font-family: monospace; white-space: pre-wrap; margin-top: 15px; font-size: 11px; }
+        .help { font-size: 12px; color: #aaa; margin: 10px 0; background: #222; padding: 10px; border-left: 3px solid #0ff; }
+        .hitbox-info { color: #f0f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <h3>🎯 Hitbox (Ütközés) Illesztő</h3>
+        
+        <div class="help">
+            <b>CÉL:</b> A <span style="color:#888;">szürke hajómodellt</span> pontosan illeszd bele a <span style="color:#0f0;">zöld drótvázas dobozba</span> (Hitboxba)! <br><br>
+            <i>Egér bal gomb: Forgatás | Jobb gomb: Mozgatás | Görgő: Nagyítás</i>
+        </div>
+
+        <label>Melyik hajót kalibráljuk?</label>
+        <select id="shipSelect">
+            <option value="0">2helyes.glb (Hossz: 2)</option>
+            <option value="1">3helyes1.glb (Hossz: 3)</option>
+            <option value="2">3helyes2.glb (Hossz: 3)</option>
+            <option value="3">4helyes.glb (Hossz: 4)</option>
+            <option value="4">5helyes.glb (Hossz: 5)</option>
+        </select>
+
+        <label>Méret (Scale): <span id="scaleVal" class="val">0.10</span></label>
+        <input type="range" id="scale" min="0.01" max="0.5" step="0.01" value="0.10">
+
+        <label>X Forgatás (Bólintás): <span id="rotXVal" class="val">90°</span></label>
+        <input type="range" id="rotX" min="-180" max="180" step="5" value="90">
+
+        <label>Y Forgatás (Irányék): <span id="rotYVal" class="val">0°</span></label>
+        <input type="range" id="rotY" min="-180" max="180" step="5" value="0">
+
+        <label>Z Forgatás (Dőlés): <span id="rotZVal" class="val">0°</span></label>
+        <input type="range" id="rotZ" min="-180" max="180" step="5" value="0">
+
+        <label>X Eltolás (Piros tengely): <span id="posXVal" class="val">0.0</span></label>
+        <input type="range" id="posX" min="-10" max="10" step="0.05" value="0">
+
+        <label>Y Eltolás (Magasság): <span id="posYVal" class="val">0.0</span></label>
+        <input type="range" id="posY" min="-10" max="10" step="0.05" value="0">
+
+        <label>Z Eltolás (Kék tengely - Hossz!): <span id="posZVal" class="val">0.0</span></label>
+        <input type="range" id="posZ" min="-10" max="10" step="0.05" value="0">
+
+        <label>A Végleges main.js kódod:</label>
+        <div id="code-output"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        // Kamera beállítása
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(6, 6, 6); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        canvasContainer.appendChild(renderer.domElement);
+
+        // Szabad kamera mozgatás egerrel (OrbitControls)
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // Rács és Tengelyek (Piros=X, Zöld=Y, Kék=Z)
+        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(3); 
+        scene.add(axesHelper);
+
+        // Fények
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
+
+        // --- A SZERVER HITBOXÁNAK VIZUALIZÁLÁSA ---
+        // Ez az a doboz, amit a backend "lát" lövéskor
+        const hitboxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        let currentHitbox = null;
+
+        // Beépítettük a te eddigi értékeidet!
+        const configs = [
+            { file: '2helyes.glb', length: 2, scale: 0.10, rotX: 90, rotY: 0, rotZ: 0, posX: 0.6, posY: 1.2, posZ: 4.5 },
+            { file: '3helyes1.glb', length: 3, scale: 0.10, rotX: 90, rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: 2.7 },
+            { file: '3helyes2.glb', length: 3, scale: 0.10, rotX: 90, rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: -3.4 },
+            { file: '4helyes.glb', length: 4, scale: 0.10, rotX: 90, rotY: 0, rotZ: 0, posX: 2.0, posY: 1.2, posZ: -1.8 },
+            { file: '5helyes.glb', length: 5, scale: 0.10, rotX: 0, rotY: 0, rotZ: 0, posX: 2.4, posY: 1.2, posZ: 0.3 }
+        ];
+        
+        const loader = new THREE.GLTFLoader();
+        let loadedModels = [];
+        let currentModelWrapper = null;
+        let currentModelMesh = null;
+
+        // UI Elemek
+        const selectEl = document.getElementById('shipSelect');
+        const scaleEl = document.getElementById('scale');
+        const rotXEl = document.getElementById('rotX'), rotYEl = document.getElementById('rotY'), rotZEl = document.getElementById('rotZ');
+        const posXEl = document.getElementById('posX'), posYEl = document.getElementById('posY'), posZEl = document.getElementById('posZ');
+        
+        const scaleVal = document.getElementById('scaleVal');
+        const rotXVal = document.getElementById('rotXVal'), rotYVal = document.getElementById('rotYVal'), rotZVal = document.getElementById('rotZVal');
+        const posXVal = document.getElementById('posXVal'), posYVal = document.getElementById('posYVal'), posZVal = document.getElementById('posZVal');
+        
+        const codeOutput = document.getElementById('code-output');
+
+        Promise.all(configs.map(cfg => {
+            return new Promise(resolve => {
+                loader.load(cfg.file, (gltf) => {
+                    const model = gltf.scene;
+                    model.traverse((child) => {
+                        if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
+                    });
+                    resolve(model);
+                });
+            });
+        })).then(models => {
+            loadedModels = models;
+            displayModel(0);
+        });
+
+        function displayModel(index) {
+            // Töröljük a régit
+            if (currentModelWrapper) scene.remove(currentModelWrapper);
+            if (currentHitbox) scene.remove(currentHitbox);
+            
+            const cfg = configs[index];
+
+            // 1. Megrajzoljuk a Szerver Hitboxát (Szélesség mindig 1, Hosszúság a configból)
+            // A magasságot 1-re tesszük, hogy doboz formája legyen
+            const geometry = new THREE.BoxGeometry(1, 1, cfg.length);
+            currentHitbox = new THREE.Mesh(geometry, hitboxMaterial);
+            currentHitbox.position.y = 0.5; // Hogy a rácson feküdjön, ne benne
+            scene.add(currentHitbox);
+            
+            // 2. Beállítjuk a hajót
+            currentModelMesh = loadedModels[index];
+            currentModelWrapper = new THREE.Group();
+            currentModelWrapper.add(currentModelMesh);
+            scene.add(currentModelWrapper);
+            
+            // UI frissítése
+            scaleEl.value = cfg.scale;
+            rotXEl.value = cfg.rotX; rotYEl.value = cfg.rotY; rotZEl.value = cfg.rotZ;
+            posXEl.value = cfg.posX; posYEl.value = cfg.posY; posZEl.value = cfg.posZ;
+            
+            applyTransformations();
+        }
+
+        function applyTransformations() {
+            if (!currentModelMesh) return;
+            
+            const index = selectEl.value;
+            const cfg = configs[index];
+            
+            cfg.scale = parseFloat(scaleEl.value);
+            cfg.rotX = parseInt(rotXEl.value); cfg.rotY = parseInt(rotYEl.value); cfg.rotZ = parseInt(rotZEl.value);
+            cfg.posX = parseFloat(posXEl.value); cfg.posY = parseFloat(posYEl.value); cfg.posZ = parseFloat(posZEl.value);
+
+            scaleVal.innerText = cfg.scale.toFixed(2);
+            rotXVal.innerText = cfg.rotX + '°'; rotYVal.innerText = cfg.rotY + '°'; rotZVal.innerText = cfg.rotZ + '°';
+            posXVal.innerText = cfg.posX.toFixed(2); posYVal.innerText = cfg.posY.toFixed(2); posZVal.innerText = cfg.posZ.toFixed(2);
+
+            currentModelMesh.scale.set(cfg.scale, cfg.scale, cfg.scale);
+            currentModelMesh.rotation.set(
+                THREE.MathUtils.degToRad(cfg.rotX),
+                THREE.MathUtils.degToRad(cfg.rotY),
+                THREE.MathUtils.degToRad(cfg.rotZ)
+            );
+            currentModelMesh.position.set(cfg.posX, cfg.posY, cfg.posZ);
+
+            generateCode();
+        }
+
+        function generateCode() {
+            let code = `const shipConfig = [\n`;
+            configs.forEach((c, i) => {
+                const isLast = i === configs.length - 1;
+                let rx = c.rotX === 0 ? "0" : `Math.PI * (${c.rotX}/180)`;
+                let ry = c.rotY === 0 ? "0" : `Math.PI * (${c.rotY}/180)`;
+                let rz = c.rotZ === 0 ? "0" : `Math.PI * (${c.rotZ}/180)`;
+                
+                code += `    { file: '${c.file}', scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz}, posX: ${c.posX.toFixed(2)}, posY: ${c.posY.toFixed(2)}, posZ: ${c.posZ.toFixed(2)} }${isLast ? '' : ','}\n`;
+            });
+            code += `];`;
+            codeOutput.innerText = code;
+        }
+
+        selectEl.addEventListener('change', (e) => displayModel(e.target.value));
+        scaleEl.addEventListener('input', applyTransformations);
+        rotXEl.addEventListener('input', applyTransformations); rotYEl.addEventListener('input', applyTransformations); rotZEl.addEventListener('input', applyTransformations);
+        posXEl.addEventListener('input', applyTransformations); posYEl.addEventListener('input', applyTransformations); posZEl.addEventListener('input', applyTransformations);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Kamera mozgás frissítése
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
