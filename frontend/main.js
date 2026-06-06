@@ -9,7 +9,6 @@ const enemyWatersGroup = new THREE.Group();
 scene.add(ownFleetGroup);
 scene.add(enemyWatersGroup);
 
-// Alapértelmezett sötét köd
 scene.fog = new THREE.FogExp2(0x111111, 0.04);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -21,9 +20,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x111111);
 canvasContainer.appendChild(renderer.domElement);
 
-// Rács a pakoláshoz
 const gridHelper = new THREE.GridHelper(60, 60, 0x00ff00, 0x003300);
-gridHelper.position.y = 0.01; // Épphogy a víz felett
+gridHelper.position.y = 0.01; 
 scene.add(gridHelper);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
@@ -32,27 +30,24 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
-// --- ÚJ: REALISZTIKUS VÍZ SZIMULÁCIÓ ---
+// --- ÚJ, HIBAÁLLÓ VÍZ SZIMULÁCIÓ ---
+// Külső kód helyett a beépített anyagokat használjuk textúra-animációval
+const waterTexture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg');
+waterTexture.wrapS = waterTexture.wrapT = THREE.RepeatWrapping;
+waterTexture.repeat.set(20, 20); // Sűrű hullámok
+
 const waterGeometry = new THREE.PlaneGeometry(1000, 1000);
-const water = new THREE.Water(
-    waterGeometry,
-    {
-        textureWidth: 512,
-        textureHeight: 512,
-        // Egy hivatalos víz-textúrát töltünk be a webről a hullámzáshoz
-        waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg', function (texture) {
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        }),
-        sunDirection: directionalLight.position.clone().normalize(),
-        sunColor: 0xffffff,
-        waterColor: 0x001e0f, // Mélykék, óceános szín
-        distortionScale: 3.7,
-        fog: scene.fog !== undefined
-    }
-);
+const waterMaterial = new THREE.MeshStandardMaterial({
+    color: 0x001e0f, // Mélykék óceán
+    roughness: 0.1,  // Erős csillogás a napfényen
+    metalness: 0.8,  // Visszatükröződés
+    normalMap: waterTexture,
+    normalScale: new THREE.Vector2(1.0, 1.0)
+});
+
+const water = new THREE.Mesh(waterGeometry, waterMaterial);
 water.rotation.x = -Math.PI / 2;
 scene.add(water);
-
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -60,7 +55,7 @@ const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const planeIntersect = new THREE.Vector3();
 
 /**
- * --- EFFEKTEK: ÁTLÁTSZÓ KOCKÁK (SAJÁT NÉZET) ÉS FÜST (TÁMADÓ NÉZET) ---
+ * --- EFFEKTEK: ÁTLÁTSZÓ KOCKÁK ÉS FÜST JELZŐK ---
  */
 function createGridMarker(x, z, isHit) {
     const planeGeo = new THREE.PlaneGeometry(1, 1);
@@ -109,28 +104,21 @@ function getAABB(x, z, rotY, length) {
     let width = 1;
     let isRotated = Math.abs(rotY % Math.PI) > 0.1; 
     let shrink = 0.1; 
-
-    if (isRotated) { 
-        return { minX: x - length/2 + shrink, maxX: x + length/2 - shrink, minZ: z - width/2 + shrink, maxZ: z + width/2 - shrink };
-    } else { 
-        return { minX: x - width/2 + shrink, maxX: x + width/2 - shrink, minZ: z - length/2 + shrink, maxZ: z + length/2 - shrink };
-    }
+    if (isRotated) return { minX: x - length/2 + shrink, maxX: x + length/2 - shrink, minZ: z - width/2 + shrink, maxZ: z + width/2 - shrink };
+    else return { minX: x - width/2 + shrink, maxX: x + width/2 - shrink, minZ: z - length/2 + shrink, maxZ: z + length/2 - shrink };
 }
 
 function checkOverlap(newX, newZ, newRotY, newLength) {
     const box1 = getAABB(newX, newZ, newRotY, newLength);
     for (let ship of placedShips) {
         const box2 = getAABB(ship.x, ship.z, ship.rotationY, ship.length);
-        if (!(box1.maxX <= box2.minX || box1.minX >= box2.maxX || box1.maxZ <= box2.minZ || box1.minZ >= box2.maxZ)) {
-            return true; 
-        }
+        if (!(box1.maxX <= box2.minX || box1.minX >= box2.maxX || box1.maxZ <= box2.minZ || box1.minZ >= box2.maxZ)) return true; 
     }
     return false; 
 }
 
-
 Promise.all(shipConfig.map(config => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         loader.load(config.file, (gltf) => {
             const model = gltf.scene;
             model.scale.set(config.scale, config.scale, config.scale);
@@ -138,14 +126,12 @@ Promise.all(shipConfig.map(config => {
             model.position.set(config.posX, config.posY, config.posZ);
             
             model.traverse((child) => {
-                if (child.isMesh) {
-                    child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
-                }
+                if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
             });
             const wrapper = new THREE.Group();
             wrapper.add(model);
             resolve(wrapper);
-        }, undefined, (error) => console.error('Hiba a modell betöltésekor:', config.file, error));
+        }, undefined, (error) => console.error('Hiba:', config.file, error));
     });
 })).then(models => {
     loadedModels = models;
@@ -153,8 +139,7 @@ Promise.all(shipConfig.map(config => {
 });
 
 function updateGhostShip() {
-    while(ghostShip.children.length > 0){ ghostShip.remove(ghostShip.children[0]); }
-    
+    while(ghostShip.children.length > 0) ghostShip.remove(ghostShip.children[0]); 
     if(currentShipIndex < loadedModels.length) {
         const modelClone = loadedModels[currentShipIndex].clone();
         modelClone.traverse((child) => {
@@ -187,8 +172,11 @@ const maxShips = 5;
 function animate() {
     requestAnimationFrame(animate);
     
-    // Hullámzó víz animálása
-    water.material.uniforms['time'].value += 1.0 / 60.0;
+    // Víz "folyatása" (A normál textúrát mozgatjuk folyamatosan)
+    if (waterTexture) {
+        waterTexture.offset.x += 0.0005;
+        waterTexture.offset.y += 0.001;
+    }
     
     renderer.render(scene, camera);
 }
@@ -224,7 +212,6 @@ function logMessage(msg, type = 'system') {
     logDiv.prepend(p);
 }
 
-// --- NÉZETVÁLTÁS LOGIKÁJA ---
 function switchView(view) {
     currentView = view;
     if (view === 'defensive') {
@@ -238,13 +225,12 @@ function switchView(view) {
         renderer.setClearColor(0xeeeeee);
         ownFleetGroup.visible = false;
         enemyWatersGroup.visible = true;
-        logMessage("👁️ Váltás: Ellenséges Vizek (Célzás engedélyezve)", "system");
+        logMessage("👁️ Váltás: Ellenséges Vizek", "system");
     }
 }
 
 document.getElementById('viewDefensiveBtn').addEventListener('click', () => switchView('defensive'));
 document.getElementById('viewOffensiveBtn').addEventListener('click', () => switchView('offensive'));
-
 
 /**
  * --- 3. JÁTÉKOS INTERAKCIÓK (Egér és Billentyűzet) ---
@@ -270,11 +256,8 @@ window.addEventListener('mousemove', (event) => {
         const isOverlapping = checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length);
         
         canPlaceCurrentShip = !isOverlapping;
-
         ghostShip.traverse((child) => {
-            if (child.isMesh) {
-                child.material.color.setHex(isOverlapping ? 0xff0000 : 0x00ffff);
-            }
+            if (child.isMesh) child.material.color.setHex(isOverlapping ? 0xff0000 : 0x00ffff);
         });
 
     } else if (isPlayingPhase && currentView === 'offensive') {
@@ -286,7 +269,6 @@ window.addEventListener('mousemove', (event) => {
 window.addEventListener('keydown', (event) => {
     if (isPlanningPhase && (event.key === 'r' || event.key === 'R')) {
         ghostShip.rotation.y += Math.PI / 2; 
-        
         const snappedX = ghostShip.position.x;
         const snappedZ = ghostShip.position.z;
         const length = shipConfig[currentShipIndex].length;
@@ -338,7 +320,6 @@ window.addEventListener('click', (event) => {
         logMessage("Ideje felébredni! Válts át Támadó Nézetbe a lövéshez!", "system");
     }
 });
-
 
 /**
  * --- 4. GOMBOK ÉS HÁLÓZATI ESEMÉNYEK ---
