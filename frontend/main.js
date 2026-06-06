@@ -29,19 +29,16 @@ const mouse = new THREE.Vector2();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
 const planeIntersect = new THREE.Vector3();
 
-// --- ÚJ: EFFEKTEK TÁROLÓJA ---
+// --- EFFEKTEK TÁROLÓJA ---
 const activeEffects = [];
 
-// Ez a függvény hozza létre a robbanást és a rácson maradó jelölőt
 function createExplosion(x, z, isHit) {
-    // 1. Állandó jelölő (Kocka a rácson)
     const markerGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
     const markerMat = new THREE.MeshBasicMaterial({ color: isHit ? 0xff0000 : 0x555555 });
     const marker = new THREE.Mesh(markerGeo, markerMat);
-    marker.position.set(x, 0.4, z); // Félig kiáll a rácsból
+    marker.position.set(x, 0.4, z); 
     scene.add(marker);
 
-    // 2. Táguló lökésgullám (Animált effekt)
     const waveGeo = new THREE.RingGeometry(0.1, 0.5, 32);
     const waveMat = new THREE.MeshBasicMaterial({ 
         color: isHit ? 0xff8800 : 0xaaaaaa, 
@@ -54,7 +51,6 @@ function createExplosion(x, z, isHit) {
     wave.position.set(x, 0.1, z);
     scene.add(wave);
     
-    // Betesszük az aktív effektek közé, hogy az animációs ciklus mozgassa
     activeEffects.push(wave);
 }
 
@@ -64,12 +60,13 @@ function createExplosion(x, z, isHit) {
  */
 const loader = new THREE.GLTFLoader();
 
+// A te általad kalibrált, tökéletesített beállítások!
 const shipConfig = [
-    { file: '2helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 0.6, posY: 1.2, posZ: 4.5 },
-    { file: '3helyes1.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: 2.7 },
-    { file: '3helyes2.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 1.3, posY: 1.2, posZ: -3.4 },
-    { file: '4helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: 0, posX: 2.0, posY: 1.2, posZ: -1.8 },
-    { file: '5helyes.glb', scale: 0.10, rotX: 0, rotY: 0, rotZ: 0, posX: 2.4, posY: 1.2, posZ: 0.3 }
+    { file: '2helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -3.95, posY: 1.20, posZ: -0.40 },
+    { file: '3helyes1.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -2.15, posY: 1.20, posZ: -0.20 },
+    { file: '3helyes2.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 3.95, posY: 1.20, posZ: -0.20 },
+    { file: '4helyes.glb', scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 2.35, posY: 1.20, posZ: 0.00 },
+    { file: '5helyes.glb', scale: 0.10, rotX: 0, rotY: Math.PI * (90/180), rotZ: 0, posX: -0.25, posY: 1.20, posZ: 0.10 }
 ];
 
 let loadedModels = []; 
@@ -142,18 +139,13 @@ const maxShips = 5;
 function animate() {
     requestAnimationFrame(animate);
     
-    // --- ÚJ: EFFEKTEK ANIMÁLÁSA ---
     for (let i = activeEffects.length - 1; i >= 0; i--) {
         const effect = activeEffects[i];
         
-        // Tágulás
         effect.scale.x += 0.1;
         effect.scale.y += 0.1;
-        
-        // Halványodás
         effect.material.opacity -= 0.02;
 
-        // Ha teljesen elhalványult, kitöröljük a memóriából és a színtérből
         if (effect.material.opacity <= 0) {
             scene.remove(effect);
             activeEffects.splice(i, 1);
@@ -208,12 +200,12 @@ window.addEventListener('mousemove', (event) => {
     raycaster.ray.intersectPlane(plane, planeIntersect);
 
     if (isPlanningPhase) {
-        ghostShip.position.x = Math.round(planeIntersect.x);
-        ghostShip.position.z = Math.round(planeIntersect.z);
+        ghostShip.position.x = Math.floor(planeIntersect.x) + 0.5;
+        ghostShip.position.z = Math.floor(planeIntersect.z) + 0.5;
         ghostShip.position.y = 0; 
     } else if (isPlayingPhase) {
-        targetReticle.position.x = Math.round(planeIntersect.x);
-        targetReticle.position.z = Math.round(planeIntersect.z);
+        targetReticle.position.x = Math.floor(planeIntersect.x) + 0.5;
+        targetReticle.position.z = Math.floor(planeIntersect.z) + 0.5;
     }
 });
 
@@ -309,14 +301,11 @@ socket.on('battle_begins', (msg) => {
     targetReticle.visible = true;
 });
 
-// --- ÚJ: LÖVÉS EREDMÉNYÉNEK FELDOLGOZÁSA ÉS VIZUALIZÁLÁSA ---
 socket.on('shot_result', (data) => {
     const isMe = (data.shooter === socket.id);
     
-    // Lerendereljük a vizuális effektet
     createExplosion(data.x, data.z, data.hit);
 
-    // Kiírjuk az üzenetet a radarnaplóba
     if (isMe) {
         if (data.hit) {
             logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'system');
