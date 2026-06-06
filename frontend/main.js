@@ -11,8 +11,8 @@ scene.add(enemyWatersGroup);
 
 scene.fog = new THREE.FogExp2(0x111111, 0.04);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 15, 20); 
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 15, 15); // Kicsit közelebbről indulunk
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -20,8 +20,14 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x111111);
 canvasContainer.appendChild(renderer.domElement);
 
-const gridHelper = new THREE.GridHelper(60, 60, 0x00ff00, 0x003300);
-gridHelper.position.y = 0.01; 
+// --- ÚJ: Szabad kamera forgatás ---
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+// Csak a jobb gombot és a görgőt engedjük a kamerának, hogy a bal klikk maradjon a játéknak!
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+controls.enableDamping = true; 
+
+// --- ÚJ: Kisebb, behatárolt 20x20-as játéktér ---
+const gridHelper = new THREE.GridHelper(20, 20, 0x00ff00, 0x003300);
 scene.add(gridHelper);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
@@ -30,27 +36,9 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
-// --- ÚJ, HIBAÁLLÓ VÍZ SZIMULÁCIÓ ---
-// Külső kód helyett a beépített anyagokat használjuk textúra-animációval
-const waterTexture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg');
-waterTexture.wrapS = waterTexture.wrapT = THREE.RepeatWrapping;
-waterTexture.repeat.set(20, 20); // Sűrű hullámok
-
-const waterGeometry = new THREE.PlaneGeometry(1000, 1000);
-const waterMaterial = new THREE.MeshStandardMaterial({
-    color: 0x001e0f, // Mélykék óceán
-    roughness: 0.1,  // Erős csillogás a napfényen
-    metalness: 0.8,  // Visszatükröződés
-    normalMap: waterTexture,
-    normalScale: new THREE.Vector2(1.0, 1.0)
-});
-
-const water = new THREE.Mesh(waterGeometry, waterMaterial);
-water.rotation.x = -Math.PI / 2;
-scene.add(water);
-
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+// A matematikai sík, amivel az egeret metsszük (végtelen tenger helyett csak egy matematikai lap)
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
 const planeIntersect = new THREE.Vector3();
 
@@ -103,7 +91,7 @@ scene.add(ghostShip);
 function getAABB(x, z, rotY, length) {
     let width = 1;
     let isRotated = Math.abs(rotY % Math.PI) > 0.1; 
-    let shrink = 0.1; 
+    let shrink = 0.1; // Zsugorítjuk, hogy a rács szélén ne jelezzen fals ütközést
     if (isRotated) return { minX: x - length/2 + shrink, maxX: x + length/2 - shrink, minZ: z - width/2 + shrink, maxZ: z + width/2 - shrink };
     else return { minX: x - width/2 + shrink, maxX: x + width/2 - shrink, minZ: z - length/2 + shrink, maxZ: z + length/2 - shrink };
 }
@@ -171,13 +159,7 @@ const maxShips = 5;
 // Animációs ciklus
 function animate() {
     requestAnimationFrame(animate);
-    
-    // Víz "folyatása" (A normál textúrát mozgatjuk folyamatosan)
-    if (waterTexture) {
-        waterTexture.offset.x += 0.0005;
-        waterTexture.offset.y += 0.001;
-    }
-    
+    controls.update(); // Kamera fizika frissítése
     renderer.render(scene, camera);
 }
 animate();
@@ -242,10 +224,15 @@ window.addEventListener('mousemove', (event) => {
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
-    raycaster.ray.intersectPlane(plane, planeIntersect);
+    const intersects = raycaster.ray.intersectPlane(plane, planeIntersect);
+    
+    if (!intersects) return; // Ha felnézünk az égre, ne omoljon össze a kód
 
     const snappedX = Math.floor(planeIntersect.x) + 0.5;
     const snappedZ = Math.floor(planeIntersect.z) + 0.5;
+
+    // Csak a 20x20-as rácson belül engedjük a játékot (X és Z: -10-től +10-ig)
+    const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
 
     if (isPlanningPhase && currentShipIndex < maxShips) {
         ghostShip.position.x = snappedX;
@@ -255,14 +242,18 @@ window.addEventListener('mousemove', (event) => {
         const length = shipConfig[currentShipIndex].length;
         const isOverlapping = checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length);
         
-        canPlaceCurrentShip = !isOverlapping;
+        // Tiltjuk a lerakást, ha ütközik VAGY ha lelóg a rácsról
+        canPlaceCurrentShip = !isOverlapping && !isOutOfBounds;
+
         ghostShip.traverse((child) => {
-            if (child.isMesh) child.material.color.setHex(isOverlapping ? 0xff0000 : 0x00ffff);
+            if (child.isMesh) child.material.color.setHex(canPlaceCurrentShip ? 0x00ffff : 0xff0000);
         });
 
     } else if (isPlayingPhase && currentView === 'offensive') {
         targetReticle.position.x = snappedX;
         targetReticle.position.z = snappedZ;
+        // Elrejtjük a célkeresztet, ha lelóg a tábláról
+        targetReticle.visible = !isOutOfBounds;
     }
 });
 
@@ -272,7 +263,9 @@ window.addEventListener('keydown', (event) => {
         const snappedX = ghostShip.position.x;
         const snappedZ = ghostShip.position.z;
         const length = shipConfig[currentShipIndex].length;
-        canPlaceCurrentShip = !checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length);
+        
+        const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
+        canPlaceCurrentShip = !checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length) && !isOutOfBounds;
         
         ghostShip.traverse((child) => {
             if (child.isMesh) child.material.color.setHex(canPlaceCurrentShip ? 0x00ffff : 0xff0000);
@@ -281,11 +274,12 @@ window.addEventListener('keydown', (event) => {
 });
 
 window.addEventListener('click', (event) => {
+    // Ne reagáljon, ha a UI-ra kattintunk
     if (event.target !== renderer.domElement) return;
 
     if (isPlanningPhase && currentShipIndex < maxShips) {
         if (!canPlaceCurrentShip) {
-            logMessage("❌ Nem rakhatod ide a hajót, ütközik egy másikkal!", "enemy");
+            logMessage("❌ Érvénytelen pozíció! Ütközik vagy lelóg a pályáról.", "enemy");
             return; 
         }
 
@@ -314,8 +308,10 @@ window.addEventListener('click', (event) => {
             updateGhostShip();
         }
     } else if (isPlayingPhase && currentView === 'offensive') {
-        const shotData = { x: targetReticle.position.x, y: 0, z: targetReticle.position.z };
-        socket.emit('shoot', shotData);
+        if (targetReticle.visible) {
+            const shotData = { x: targetReticle.position.x, y: 0, z: targetReticle.position.z };
+            socket.emit('shoot', shotData);
+        }
     } else if (isPlayingPhase && currentView === 'defensive') {
         logMessage("Ideje felébredni! Válts át Támadó Nézetbe a lövéshez!", "system");
     }
