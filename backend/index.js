@@ -29,7 +29,7 @@ app.get('/monitor', (req, res) => {
   res.send(html);
 });
 
-// Ütközésvizsgálat (Visszaadja a meglőtt hajó indexét)
+// Ütközésvizsgálat (Visszaadja a meglőtt hajó indexét, ami a HP számoláshoz kell)
 function checkHitIndex(shot, ships) {
   for (let i = 0; i < ships.length; i++) {
     let ship = ships[i];
@@ -100,7 +100,7 @@ io.on('connection', (socket) => {
 
       if (room.p1_ready && room.p2_ready) {
         room.status = 'playing';
-        room.currentTurn = room.players[0]; // P1 kezd
+        room.currentTurn = room.players[0]; // P1 kezd mindig
         
         io.to(currentRoom).emit('battle_begins', 'Mindkét flotta készen áll! Kezdődik a harc!');
         io.to(currentRoom).emit('turn_update', room.currentTurn);
