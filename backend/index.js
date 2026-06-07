@@ -118,8 +118,18 @@ io.on('connection', (socket) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
       
-      // Biztonsági ellenőrzés: Csak az lőhet, aki következik
-      if (room.currentTurn !== socket.id) return;
+      // BIZTONSÁGI ELLENŐRZÉS: Ha nem ő jön, eldobja a kérést
+    if (room.currentTurn !== socket.id) {
+        return; 
+    }
+
+    // ... a meglévő lövés feldolgozó logika ...
+    
+    // Végül a kör átadása
+    room.currentTurn = (room.players[0] === socket.id) ? room.players[1] : room.players[0];
+    
+    // Értesítjük a feleket az új körről
+    io.to(currentRoom).emit('turn_update', room.currentTurn);
 
       let targetShips = [];
       
