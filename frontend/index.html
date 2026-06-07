@@ -53,17 +53,10 @@
             cursor: not-allowed; 
         }
 
-        input { background: #000; }
+        input { background: #000; text-align: center;}
         input:focus { outline: none; box-shadow: 0 0 10px rgba(0, 255, 0, 0.8); border-color: #fff; color: #fff; }
         
-        #roomCodeInput { 
-            text-align: center; 
-            font-size: 20px; 
-            letter-spacing: 5px; 
-            font-weight: bold; 
-            text-transform: uppercase; 
-            margin-top: 15px;
-        }
+        #roomCodeInput { font-size: 20px; letter-spacing: 5px; font-weight: bold; text-transform: uppercase; margin-top: 15px; }
 
         .divider { text-align: center; color: #555; margin: 10px 0; font-size: 14px; }
 
@@ -78,11 +71,46 @@
         }
         .enemy { color: #f55; }
         .system { color: #aaa; }
+        .hit { color: #ffaa00; font-weight: bold; }
         
         #planning-area, #game-area { display: none; margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 20px; }
         .instruction { color: #0ff; font-size: 0.9em; margin-bottom: 15px; text-align: center; background: rgba(0, 255, 255, 0.1); padding: 10px; border-radius: 4px;}
         
         .view-btn { font-size: 14px; font-weight: bold; }
+        
+        #turn-indicator { padding: 10px; text-align: center; font-weight: bold; font-size: 16px; border-radius: 4px; margin-bottom: 15px; border: 1px solid; }
+
+        /* RADAR HUD (Középen felugró ablak) */
+        #radar-overlay {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 15, 0, 0.95);
+            border: 2px solid #0f0;
+            padding: 25px;
+            border-radius: 10px;
+            z-index: 100;
+            box-shadow: 0 0 50px rgba(0, 255, 0, 0.2);
+        }
+        #radar-grid {
+            display: grid;
+            grid-template-columns: repeat(20, 25px);
+            grid-template-rows: repeat(20, 25px);
+            gap: 1px;
+            background: #003300;
+            border: 2px solid #0f0;
+            margin: 0 auto;
+        }
+        .radar-cell {
+            background: rgba(0, 255, 0, 0.1);
+            cursor: crosshair;
+            transition: background 0.2s;
+        }
+        .radar-cell:hover { background: rgba(0, 255, 0, 0.5); }
+        .radar-cell.miss { background: #555; cursor: not-allowed; }
+        .radar-cell.hit { background: #f55; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -113,18 +141,25 @@
 
         <div id="game-area">
             <h3 style="color: #f55;">🔥 Harckészültség!</h3>
+            <div id="turn-indicator">Várakozás...</div>
             <div id="view-controls">
-                <button id="viewDefensiveBtn" class="view-btn" style="border-color: #0f0; color: #0f0;">🛡️ Saját Flotta Nézete</button>
-                <button id="viewOffensiveBtn" class="view-btn" style="border-color: #f55; color: #f55;">⚔️ Támadó Nézet (Köd)</button>
-                <button id="viewRadarBtn" class="view-btn" style="border-color: #00f; color: #55f;" disabled>📡 Radar (Fejlesztés alatt)</button>
+                <button id="viewDefensiveBtn" class="view-btn" style="border-color: #0f0; color: #0f0;">🛡️ Saját Flotta</button>
+                <button id="viewOffensiveBtn" class="view-btn" style="border-color: #f55; color: #f55;">⚔️ Render (Köd) Nézet</button>
+                <button id="viewRadarBtn" class="view-btn" style="border-color: #0ff; color: #0ff; background: #002222; margin-top: 15px;">📡 Taktikai Radar Megnyitása</button>
             </div>
             <div class="instruction" style="color: #f55; background: rgba(255, 0, 0, 0.1);">
-                Válts Támadó nézetbe a lövéshez!<br>
-                Kattints a bal gombbal a ködben!
+                Lövés leadásához nyisd meg a Taktikai Radart!
             </div>
         </div>
 
         <div id="radar-log"></div>
+    </div>
+
+    <div id="radar-overlay">
+        <h2 style="color: #0ff; margin-top: 0;">📡 Taktikai Radar</h2>
+        <p style="text-align: center; color: #0f0; margin-top: -5px; margin-bottom: 15px;">Kattints egy koordinátára a kilövéshez!</p>
+        <div id="radar-grid"></div>
+        <button id="closeRadarBtn" style="margin-top: 20px;">Vissza a parancsnokságra</button>
     </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
