@@ -523,11 +523,23 @@ socket.on('shot_result', (data) => {
     if (isMe) {
         myShotsOnRadar[`${data.x},${data.z}`] = data.hit ? 'hit' : 'miss';
         
+        // --- AUTOMATIKUS KAMERA ÁTMENET ---
+        switchView('offensive'); // Átváltunk a ködös/becsapódás nézetre
+        
+        targetReticle.position.set(data.x, 0.1, data.z);
+        targetReticle.visible = true;
+        
         createCinematicExplosion(data.x, data.z, data.hit);
         if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'hit');
         else logMessage(`💦 Mellé. Csobbanás a tengerben. (X:${data.x}, Z:${data.z})`, 'system');
 
         if (data.sunk) logMessage(`☠️ TALÁLT, SÜLLYEDT! Egy ellenséges hajó megsemmisült!`, 'hit');
+
+        // 3 MÁSODPERC MÚLVA VISSZATÉRÜNK A FLOTTA NÉZETBE
+        setTimeout(() => {
+            switchView('defensive');
+            targetReticle.visible = false;
+        }, 3000);
 
     } else {
         createGridMarker(data.x, data.z, data.hit);
