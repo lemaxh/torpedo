@@ -20,12 +20,10 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x111111);
 canvasContainer.appendChild(renderer.domElement);
 
-// --- SZABAD KAMERA MOZGATÁS ---
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.enableDamping = true; 
 
-// 20x20-as Rács
 const gridHelper = new THREE.GridHelper(20, 20, 0x00ff00, 0x003300);
 gridHelper.position.y = 0.01; 
 scene.add(gridHelper);
@@ -37,26 +35,27 @@ directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
 
-// --- JAVÍTOTT, REALISZTIKUS VÍZ SZIMULÁTOR ---
+// --- JAVÍTOTT VÍZ SZIMULÁTOR ---
+// A textúrát először létrehozzuk, és azonnal rárakjuk a tulajdonságokat
+const waterNormals = new THREE.TextureLoader().load('https://unpkg.com/three@0.145.0/examples/textures/waternormals.jpg');
+waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+
 const waterGeometry = new THREE.PlaneGeometry(1000, 1000);
 const water = new THREE.Water(
     waterGeometry,
     {
         textureWidth: 512,
         textureHeight: 512,
-        // HIVATALOS CDN LINK, AMI ENGEDÉLYEZI A 3D BEOLVASÁST!
-        waterNormals: new THREE.TextureLoader().load('https://unpkg.com/three@0.145.0/examples/textures/waternormals.jpg', function (texture) {
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        }),
+        waterNormals: waterNormals,
         sunDirection: directionalLight.position.clone().normalize(),
         sunColor: 0xffffff,
-        waterColor: 0x001e0f, // Mélykék, óceános szín
-        distortionScale: 3.7,
+        waterColor: 0x001e0f, 
+        distortionScale: 8.0, // Erősebb hullámok!
         fog: scene.fog !== undefined
     }
 );
 water.rotation.x = -Math.PI / 2;
-water.position.y = -0.05; // Épphogy a rács alá!
+water.position.y = -0.05; 
 scene.add(water);
 
 
@@ -69,16 +68,17 @@ const planeIntersect = new THREE.Vector3();
 /**
  * --- EFFEKTEK ÉS RÉSZECSKERENDSZER (PARTICLES) ---
  */
-const particlesArray = []; // Itt tároljuk a robbanásokat
+const particlesArray = []; 
 
 function createCinematicExplosion(x, z, isHit) {
-    const particleCount = isHit ? 150 : 80; 
+    const particleCount = isHit ? 150 : 100; 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const velocities = [];
     const colors = new Float32Array(particleCount * 3);
 
-    const color1 = isHit ? new THREE.Color(0xff4400) : new THREE.Color(0xaaaaaa); 
+    // SZÍNEK SZÉTVÁLASZTÁSA: Tűz (Narancs/Sárga) VS Víz (Kék/Fehér)
+    const color1 = isHit ? new THREE.Color(0xff4400) : new THREE.Color(0x2266cc); 
     const color2 = isHit ? new THREE.Color(0xffff00) : new THREE.Color(0xffffff); 
 
     for (let i = 0; i < particleCount; i++) {
@@ -87,7 +87,7 @@ function createCinematicExplosion(x, z, isHit) {
         positions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.5;
 
         let vx = (Math.random() - 0.5) * 0.2;
-        let vy = (Math.random() * 0.3) + 0.1; 
+        let vy = (Math.random() * 0.4) + 0.1; 
         let vz = (Math.random() - 0.5) * 0.2;
         velocities.push({ x: vx, y: vy, z: vz });
 
@@ -105,11 +105,12 @@ function createCinematicExplosion(x, z, isHit) {
         vertexColors: true,
         transparent: true,
         opacity: 1.0,
-        blending: THREE.AdditiveBlending 
+        // KEVERÉS SZÉTVÁLASZTÁSA: Ha találat -> Világít (Additive), Ha mellé -> Normál víz (Normal)
+        blending: isHit ? THREE.AdditiveBlending : THREE.NormalBlending 
     });
 
     const particleSystem = new THREE.Points(geometry, material);
-    enemyWatersGroup.add(particleSystem); // Támadó nézetben jelenik meg!
+    enemyWatersGroup.add(particleSystem); 
 
     particlesArray.push({ system: particleSystem, velocities: velocities, life: 1.0 });
 }
@@ -222,12 +223,12 @@ function animate() {
     
     controls.update(); 
     
-    // Víz hullámzása
-    if (water.material.uniforms['time']) {
+    // Stabil víz hullámzás
+    if (water !== undefined && water.material.uniforms !== undefined) {
         water.material.uniforms['time'].value += 1.0 / 60.0;
     }
 
-    // Részecskék (Robbanás) fizikája
+    // Részecskék (Robbanás/Csobbanás) fizikája
     for (let i = particlesArray.length - 1; i >= 0; i--) {
         let pObj = particlesArray[i];
         let positions = pObj.system.geometry.attributes.position.array;
@@ -302,7 +303,7 @@ function switchView(view) {
         enemyWatersGroup.visible = false;
         logMessage("👁️ Váltás: Saját Flotta", "system");
     } else if (view === 'offensive') {
-        scene.fog = new THREE.FogExp2(0xeeeeee, 0.08); // Fehér köd!
+        scene.fog = new THREE.FogExp2(0xeeeeee, 0.08);
         renderer.setClearColor(0xeeeeee);
         ownFleetGroup.visible = false;
         enemyWatersGroup.visible = true;
@@ -457,17 +458,14 @@ socket.on('battle_begins', (msg) => {
     viewControls.style.display = 'block'; 
 });
 
-// --- ÚJ: ROBBANÁS MOZIÉLMÉNY MEGHÍVÁSA ---
 socket.on('shot_result', (data) => {
     const isMe = (data.shooter === socket.id);
     
     if (isMe) {
-        // Támadó nézetben lövünk: Dinamikus robbanás a ködben!
         createCinematicExplosion(data.x, data.z, data.hit);
         if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'system');
         else logMessage(`💦 Mellé. Csobbanás a tengerben. (X:${data.x}, Z:${data.z})`, 'system');
     } else {
-        // Saját nézetben kapjuk a lövést: Átlátszó radar-kocka jelenik meg
         createGridMarker(data.x, data.z, data.hit);
         if (data.hit) logMessage(`⚠️ FIGYELEM! Eltalálták egy hajónkat! (X:${data.x}, Z:${data.z})`, 'enemy');
         else logMessage(`Közel volt... Az ellenfél mellélőtt. (X:${data.x}, Z:${data.z})`, 'enemy');
