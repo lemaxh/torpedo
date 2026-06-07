@@ -76,8 +76,6 @@
         #planning-area, #game-area { display: none; margin-top: 20px; border-top: 1px dashed #0f0; padding-top: 20px; }
         .instruction { color: #0ff; font-size: 0.9em; margin-bottom: 15px; text-align: center; background: rgba(0, 255, 255, 0.1); padding: 10px; border-radius: 4px;}
         
-        .view-btn { font-size: 14px; font-weight: bold; }
-
         /* Kör állapotjelző stílusok */
         .turn-status {
             padding: 15px;
@@ -103,11 +101,10 @@
             background: rgba(255, 0, 0, 0.1);
         }
 
-        /* RADAR HUD */
-       /* --- ÚJ ZSEBRADAR STÍLUSOK --- */
+        /* --- ÚJ ZSEBRADAR STÍLUSOK --- */
         #pocket-radar {
             position: fixed;
-            bottom: -360px; /* Rejtett állapot (csak a fül látszik) */
+            bottom: -360px; 
             left: 50%;
             transform: translateX(-50%);
             width: 360px;
@@ -122,10 +119,10 @@
             box-shadow: 0 -5px 20px rgba(0, 255, 0, 0.2);
         }
         #pocket-radar:hover:not(.open) {
-            bottom: -340px; /* Rámutatáskor picit feljebb bukkan */
+            bottom: -340px; 
         }
         #pocket-radar.open {
-            bottom: 0; /* Teljesen kinyitva */
+            bottom: 0; 
         }
         #radar-handle {
             width: 100%;
@@ -161,7 +158,7 @@
             background: #002200;
             border: 2px solid #0f0;
             position: relative;
-            z-index: 2; /* Söprés felett maradjon a rács kattinthatósága */
+            z-index: 2; 
         }
         
         .radar-cell {
@@ -172,7 +169,6 @@
         .radar-cell.miss { background: #555; cursor: not-allowed; }
         .radar-cell.hit { background: #f55; cursor: not-allowed; }
 
-        /* Vizuális szétválasztás a rács közepén */
         .radar-crosshair-x, .radar-crosshair-y {
             position: absolute;
             background: rgba(0, 255, 0, 0.8);
@@ -182,7 +178,6 @@
         .radar-crosshair-x { top: 50%; left: 25px; right: 25px; height: 2px; transform: translateY(-50%); box-shadow: 0 0 5px #0f0;}
         .radar-crosshair-y { left: 50%; top: 25px; bottom: 25px; width: 2px; transform: translateX(-50%); box-shadow: 0 0 5px #0f0;}
 
-        /* Forgó radarsöprés animáció */
         .radar-sweep {
             position: absolute;
             top: 50%;
@@ -234,14 +229,9 @@
             <div id="turn-indicator" class="turn-status">
                 Várakozás az ellenfélre...
             </div>
-
-            <div id="view-controls">
-                <button id="viewDefensiveBtn" class="view-btn" style="border-color: #0f0; color: #0f0;">🛡️ Saját Flotta</button>
-                <button id="viewOffensiveBtn" class="view-btn" style="border-color: #f55; color: #f55;">⚔️ Render (Köd) Nézet</button>
-                <button id="viewRadarBtn" class="view-btn" style="border-color: #0ff; color: #0ff; background: #002222; margin-top: 15px;">📡 Taktikai Radar Megnyitása</button>
-            </div>
+            
             <div class="instruction" style="color: #f55; background: rgba(255, 0, 0, 0.1);">
-                Lövés leadásához nyisd meg a Taktikai Radart!
+                Lövés leadásához nyisd meg az alsó Radart!
             </div>
         </div>
 
