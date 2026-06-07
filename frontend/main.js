@@ -216,7 +216,6 @@ enemyWatersGroup.add(targetReticle);
 let isPlanningPhase = false;
 let isPlayingPhase = false;
 let isMyTurn = false; 
-let currentView = 'defensive';
 const placedShips = [];
 const maxShips = 5;
 const myShotsOnRadar = {}; 
@@ -290,44 +289,44 @@ const shipCountSpan = document.getElementById('ship-count');
 const readyBtn = document.getElementById('readyBtn');
 const turnIndicator = document.getElementById('turn-indicator');
 
-function logMessage(msg, type = 'system') {
-    const p = document.createElement('p');
-    p.innerHTML = msg;
-    p.className = type;
-    logDiv.prepend(p);
-}
-
+// Belső nézetváltó funkció (A GOMBOKTÓL FÜGGETLENÜL MEGHAGYVA, mert az animáció ezt hívja)
 function switchView(view) {
-    currentView = view;
     if (view === 'defensive') {
         scene.fog = new THREE.FogExp2(0x111111, 0.04);
         renderer.setClearColor(0x111111);
         ownFleetGroup.visible = true;
         enemyWatersGroup.visible = false;
-        logMessage("👁️ Váltás: Saját Flotta", "system");
     } else if (view === 'offensive') {
         scene.fog = new THREE.FogExp2(0xdddddd, 0.06); 
         renderer.setClearColor(0xdddddd);
         ownFleetGroup.visible = false;
         enemyWatersGroup.visible = true;
-        logMessage("👁️ Váltás: Támadó (Köd) Nézet", "system");
     }
 }
 
+function logMessage(msg, type = 'system') {
+    const p = document.createElement('p');
+    p.innerHTML = msg; p.className = type; logDiv.prepend(p);
+}
+
 /**
- * --- ÚJ ZSEBRADAR LOGIKA ÉS GENERÁLÁS ---
+ * --- ZSEBRADAR LOGIKA (KAPCSOLÓ ÉS GENERÁLÁS) ---
  */
 const pocketRadar = document.getElementById('pocket-radar');
 const radarHandle = document.getElementById('radar-handle');
 
-radarHandle.addEventListener('click', () => {
-    pocketRadar.classList.toggle('open');
+function updateRadarHandleText() {
     if (pocketRadar.classList.contains('open')) {
-        radarHandle.innerText = "📡 Taktikai Radar (Kattints a bezáráshoz)";
+        radarHandle.innerText = isMyTurn ? "📡 Taktikai Radar (Kattints a bezáráshoz)" : "📡 Radar (Ellenfél köre - Bezárás)";
         buildRadarGrid(); 
     } else {
-        radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
+        radarHandle.innerText = isMyTurn ? "📡 Taktikai Radar (Kattints a nyitáshoz)" : "📡 Radar (Ellenfél köre - Megtekintés)";
     }
+}
+
+radarHandle.addEventListener('click', () => {
+    pocketRadar.classList.toggle('open');
+    updateRadarHandleText();
 });
 
 function buildRadarGrid() {
@@ -345,10 +344,8 @@ function buildRadarGrid() {
             else if (myShotsOnRadar[cellKey] === 'miss') cell.classList.add('miss');
 
             cell.addEventListener('click', () => {
-                if (!isMyTurn) {
-                    alert("Még nem te jössz! Várd meg az ellenfél lépését.");
-                    return;
-                }
+                // Biztonsági blokk: Csak a saját körödben lőhetsz (már hibaüzenet nélkül, némán letiltva)
+                if (!isMyTurn) return; 
                 if (myShotsOnRadar[cellKey]) return; 
 
                 // Lövés elküldése
@@ -356,7 +353,7 @@ function buildRadarGrid() {
                 
                 // Radar visszacsukása automatikusan
                 pocketRadar.classList.remove('open');
-                radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
+                updateRadarHandleText();
             });
             radarGrid.appendChild(cell);
         }
@@ -364,11 +361,21 @@ function buildRadarGrid() {
 }
 
 /**
+ * --- GAME OVER GOMBOK ---
+ */
+document.getElementById('rematchBtn').addEventListener('click', () => {
+    window.location.reload(); // A legtisztább megoldás az új körhöz: frissíti az oldalt
+});
+document.getElementById('exitBtn').addEventListener('click', () => {
+    // Üres képernyőt hagyunk vissza, mintha kilépett volna a játékból
+    document.body.innerHTML = "<h1 style='text-align:center; margin-top:20%; color:#0f0;'>Sikeresen kiléptél a Parancsnokságról.</h1>";
+});
+
+/**
  * --- 3. JÁTÉKOS INTERAKCIÓK (Egér pakolás) ---
  */
 window.addEventListener('mousemove', (event) => {
     if (!isPlanningPhase) return;
-
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -381,10 +388,7 @@ window.addEventListener('mousemove', (event) => {
     const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
 
     if (currentShipIndex < maxShips) {
-        ghostShip.position.x = snappedX;
-        ghostShip.position.z = snappedZ;
-        ghostShip.position.y = 0; 
-
+        ghostShip.position.x = snappedX; ghostShip.position.z = snappedZ; ghostShip.position.y = 0; 
         const length = shipConfig[currentShipIndex].length;
         canPlaceCurrentShip = !checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length) && !isOutOfBounds;
 
@@ -397,11 +401,9 @@ window.addEventListener('mousemove', (event) => {
 window.addEventListener('keydown', (event) => {
     if (isPlanningPhase && (event.key === 'r' || event.key === 'R')) {
         ghostShip.rotation.y += Math.PI / 2; 
-        const snappedX = ghostShip.position.x;
-        const snappedZ = ghostShip.position.z;
+        const snappedX = ghostShip.position.x; const snappedZ = ghostShip.position.z;
         const length = shipConfig[currentShipIndex].length;
         const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
-        
         canPlaceCurrentShip = !checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length) && !isOutOfBounds;
         
         ghostShip.traverse((child) => {
@@ -414,33 +416,22 @@ window.addEventListener('click', (event) => {
     if (event.target !== renderer.domElement) return;
 
     if (isPlanningPhase && currentShipIndex < maxShips) {
-        if (!canPlaceCurrentShip) {
-            logMessage("❌ Érvénytelen pozíció!", "enemy");
-            return; 
-        }
+        if (!canPlaceCurrentShip) { logMessage("❌ Érvénytelen pozíció!", "enemy"); return; }
 
         const solidShip = loadedModels[currentShipIndex].clone();
         solidShip.position.copy(ghostShip.position);
         solidShip.rotation.copy(ghostShip.rotation);
-        
         ownFleetGroup.add(solidShip);
         
         placedShips.push({ 
-            id: shipConfig[currentShipIndex].file,
-            length: shipConfig[currentShipIndex].length,
-            hp: shipConfig[currentShipIndex].length,
-            x: solidShip.position.x, 
-            z: solidShip.position.z, 
-            rotationY: solidShip.rotation.y 
+            id: shipConfig[currentShipIndex].file, length: shipConfig[currentShipIndex].length, hp: shipConfig[currentShipIndex].length,
+            x: solidShip.position.x, z: solidShip.position.z, rotationY: solidShip.rotation.y 
         });
         
-        currentShipIndex++;
-        shipCountSpan.innerText = currentShipIndex;
+        currentShipIndex++; shipCountSpan.innerText = currentShipIndex;
         
         if (currentShipIndex === maxShips) {
-            ghostShip.visible = false;
-            readyBtn.disabled = false;
-            readyBtn.style.background = "#005500";
+            ghostShip.visible = false; readyBtn.disabled = false; readyBtn.style.background = "#005500";
         } else {
             updateGhostShip();
         }
@@ -448,7 +439,7 @@ window.addEventListener('click', (event) => {
 });
 
 /**
- * --- 4. GOMBOK ÉS HÁLÓZATI ESEMÉNYEK ---
+ * --- 4. HÁLÓZATI ESEMÉNYEK ---
  */
 createRoomBtn.addEventListener('click', () => { socket.emit('create_room'); });
 joinRoomBtn.addEventListener('click', () => {
@@ -456,51 +447,39 @@ joinRoomBtn.addEventListener('click', () => {
     if (code.length > 0) socket.emit('join_room', code);
 });
 readyBtn.addEventListener('click', () => {
-    isPlanningPhase = false;
-    planningArea.style.display = 'none';
+    isPlanningPhase = false; planningArea.style.display = 'none';
     logMessage("Hajók rögzítve! Várakozás az ellenfélre...", 'system');
     socket.emit('ships_ready', placedShips);
 });
 
-socket.on('room_created', (code) => {
-    statusDisplay.innerText = `Szoba: ${code}`;
-    createRoomBtn.disabled = true; joinRoomBtn.disabled = true;
-});
-socket.on('room_joined', (code) => {
-    statusDisplay.innerText = `Csatlakozva: ${code}`;
-});
+socket.on('room_created', (code) => { statusDisplay.innerText = `Szoba: ${code}`; createRoomBtn.disabled = true; joinRoomBtn.disabled = true; });
+socket.on('room_joined', (code) => { statusDisplay.innerText = `Csatlakozva: ${code}`; });
 socket.on('game_start', (msg) => {
     logMessage(`[Parancsnokság] ${msg}`, 'system');
-    lobbyArea.style.display = 'none';
-    planningArea.style.display = 'block';
+    lobbyArea.style.display = 'none'; planningArea.style.display = 'block';
     switchView('defensive');
-    
-    if (loadedModels.length > 0) {
-        isPlanningPhase = true;
-        ghostShip.visible = true;
-    }
+    if (loadedModels.length > 0) { isPlanningPhase = true; ghostShip.visible = true; }
 });
 
 socket.on('battle_begins', (msg) => {
     logMessage(`🔥 [Parancsnokság] ${msg}`, 'system');
-    gameArea.style.display = 'block';
-    isPlayingPhase = true;
+    gameArea.style.display = 'block'; isPlayingPhase = true;
 });
 
+// KÖR FRISSÍTÉSE: Vizuális Zöld/Piros módosítók a radaron
 socket.on('turn_update', (activePlayerId) => {
     isMyTurn = (activePlayerId === socket.id);
     
     if (isMyTurn) {
         turnIndicator.className = 'turn-status my-turn';
         turnIndicator.innerText = "🟢 TE JÖSSZ! Tűzparancs engedélyezve.";
+        if (pocketRadar) pocketRadar.classList.remove('disabled');
     } else {
         turnIndicator.className = 'turn-status enemy-turn';
         turnIndicator.innerText = "🔴 ELLENFÉL KÖRE... Készülj a becsapódásra!";
-        if (pocketRadar) {
-            pocketRadar.classList.remove('open');
-            radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
-        }
+        if (pocketRadar) pocketRadar.classList.add('disabled');
     }
+    updateRadarHandleText();
 });
 
 socket.on('shot_result', (data) => {
@@ -509,43 +488,48 @@ socket.on('shot_result', (data) => {
     if (isMe) {
         myShotsOnRadar[`${data.x},${data.z}`] = data.hit ? 'hit' : 'miss';
         
-        // --- AUTOMATIKUS KAMERA ÁTMENET ---
         switchView('offensive'); 
-        
-        targetReticle.position.set(data.x, 0.1, data.z);
-        targetReticle.visible = true;
+        targetReticle.position.set(data.x, 0.1, data.z); targetReticle.visible = true;
         
         createCinematicExplosion(data.x, data.z, data.hit);
         if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'hit');
         else logMessage(`💦 Mellé. Csobbanás a tengerben. (X:${data.x}, Z:${data.z})`, 'system');
-
         if (data.sunk) logMessage(`☠️ TALÁLT, SÜLLYEDT! Egy ellenséges hajó megsemmisült!`, 'hit');
 
-        setTimeout(() => {
-            switchView('defensive');
-            targetReticle.visible = false;
-        }, 3000);
+        setTimeout(() => { switchView('defensive'); targetReticle.visible = false; }, 3000);
 
     } else {
         createGridMarker(data.x, data.z, data.hit);
         if (data.hit) logMessage(`⚠️ FIGYELEM! Eltalálták egy hajónkat! (X:${data.x}, Z:${data.z})`, 'enemy');
         else logMessage(`Közel volt... Az ellenfél mellélőtt. (X:${data.x}, Z:${data.z})`, 'system');
-        
         if (data.sunk) logMessage(`🚨 KATASZTRÓFA! Elvesztettünk egy hajót!`, 'enemy');
     }
 
+    // GAME OVER LEKEZELÉS (Késleltetve, hogy a mozis nézet befejeződhessen)
     if (data.gameOver) {
         isPlayingPhase = false;
         isMyTurn = false;
-        if (isMe) {
-            turnIndicator.className = 'turn-status my-turn';
-            turnIndicator.innerText = "🏆 GYŐZELEM! Az ellenséges flotta megsemmisült!";
-            alert("Gratulálok Parancsnok, megnyerted a csatát!");
-        } else {
-            turnIndicator.className = 'turn-status enemy-turn';
-            turnIndicator.innerText = "💀 VERESÉG... A flottánk odaveszett.";
-            alert("Sajnálom Parancsnok, a flottánk megsemmisült.");
-        }
+        if (pocketRadar) pocketRadar.classList.add('disabled');
+
+        const delay = isMe ? 3500 : 1000; // Ha én lőttem, megvárjuk amíg a kamera visszatér
+        
+        setTimeout(() => {
+            const modal = document.getElementById('game-over-modal');
+            const title = document.getElementById('game-over-title');
+            const msg = document.getElementById('game-over-message');
+            
+            modal.style.display = 'block';
+            
+            if (isMe) {
+                turnIndicator.className = 'turn-status my-turn'; turnIndicator.innerText = "🏆 GYŐZELEM!";
+                modal.className = 'victory'; title.innerText = "🏆 GYŐZELEM!"; title.style.color = "#0ff";
+                msg.innerText = "Gratulálok Parancsnok, az ellenséges flotta megsemmisült!";
+            } else {
+                turnIndicator.className = 'turn-status enemy-turn'; turnIndicator.innerText = "💀 VERESÉG...";
+                modal.className = 'defeat'; title.innerText = "💀 VERESÉG!"; title.style.color = "#f55";
+                msg.innerText = "Sajnálom Parancsnok, a flottánk odaveszett.";
+            }
+        }, delay);
     }
 });
 
