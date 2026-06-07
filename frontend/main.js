@@ -236,20 +236,48 @@ const maxShips = 5;
 function animate() {
     requestAnimationFrame(animate);
     
-    controls.update(); // Kamera fizika frissítése
+    controls.update(); 
     
-    // Víz hullámzásának animálása
-    water.material.uniforms['time'].value += 1.0 / 60.0;
-    
+    if (typeof water !== 'undefined' && water.material.uniforms['time']) {
+        water.material.uniforms['time'].value += 1.0 / 60.0;
+    }
+
+    // RÉSZECSKÉK ANIMÁLÁSA
+    for (let i = particlesArray.length - 1; i >= 0; i--) {
+        let pObj = particlesArray[i];
+        let positions = pObj.system.geometry.attributes.position.array;
+
+        pObj.life -= 0.015; // Halványodás sebessége
+        pObj.system.material.opacity = pObj.life;
+
+        for (let j = 0; j < pObj.velocities.length; j++) {
+            pObj.velocities[j].y -= 0.005; // GRAVITÁCIÓ (húz lefelé)
+            
+            positions[j * 3] += pObj.velocities[j].x;
+            positions[j * 3 + 1] += pObj.velocities[j].y;
+            positions[j * 3 + 2] += pObj.velocities[j].z;
+            
+            // Ha beleesik a vízbe, ne süllyedjen tovább a végtelenségig
+            if (positions[j * 3 + 1] < 0) {
+                positions[j * 3 + 1] = 0;
+                pObj.velocities[j].x *= 0.8; // Lelassul a vízen
+                pObj.velocities[j].z *= 0.8;
+            }
+        }
+        
+        pObj.system.geometry.attributes.position.needsUpdate = true;
+
+        // Ha elhalványult, kitöröljük a memóriából
+        if (pObj.life <= 0) {
+            scene.remove(pObj.system);
+            pObj.system.geometry.dispose();
+            pObj.system.material.dispose();
+            particlesArray.splice(i, 1);
+        }
+    }
+
     renderer.render(scene, camera);
 }
-animate();
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
 
 /**
  * --- 2. HÁLÓZAT ÉS FELÜLET (Socket.io & UI) ---
