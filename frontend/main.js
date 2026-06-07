@@ -63,6 +63,60 @@ const mouse = new THREE.Vector2();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
 const planeIntersect = new THREE.Vector3();
 
+// --- ÚJ: 3D RÉSZECSKERENDSZER (ROBBANÁS ÉS CSOBBANÁS) ---
+const particlesArray = []; // Itt tároljuk az aktív robbanásokat
+
+function createCinematicExplosion(x, z, isHit) {
+    const particleCount = isHit ? 150 : 80; // Találatnál nagyobb a bumm
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    const colors = new Float32Array(particleCount * 3);
+
+    const color1 = isHit ? new THREE.Color(0xff4400) : new THREE.Color(0xaaaaaa); // Narancs vagy Szürke
+    const color2 = isHit ? new THREE.Color(0xffff00) : new THREE.Color(0xffffff); // Sárga vagy Fehér
+
+    for (let i = 0; i < particleCount; i++) {
+        // Kezdőpont (A becsapódás helye)
+        positions[i * 3] = x + (Math.random() - 0.5) * 0.5;
+        positions[i * 3 + 1] = 0.2; // Vízfelszín
+        positions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.5;
+
+        // Sebességvektorok (Szétrepülés)
+        let vx = (Math.random() - 0.5) * 0.2;
+        let vy = (Math.random() * 0.3) + 0.1; // Felfelé repül
+        let vz = (Math.random() - 0.5) * 0.2;
+        velocities.push({ x: vx, y: vy, z: vz });
+
+        // Színkeverés
+        const mixedColor = color1.clone().lerp(color2, Math.random());
+        colors[i * 3] = mixedColor.r;
+        colors[i * 3 + 1] = mixedColor.g;
+        colors[i * 3 + 2] = mixedColor.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+        size: 0.15,
+        vertexColors: true,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending // Ettől fog "világítani" a tűz
+    });
+
+    const particleSystem = new THREE.Points(geometry, material);
+    scene.add(particleSystem);
+
+    // Eltároljuk az animációs ciklusnak
+    particlesArray.push({
+        system: particleSystem,
+        velocities: velocities,
+        life: 1.0 // 1.0-tól csökken 0-ig
+    });
+}
+
 /**
  * --- EFFEKTEK: ÁTLÁTSZÓ KOCKÁK ÉS FÜST JELZŐK ---
  */
@@ -401,12 +455,14 @@ socket.on('battle_begins', (msg) => {
 socket.on('shot_result', (data) => {
     const isMe = (data.shooter === socket.id);
     
+    // MEGHÍVJUK A MOZIS ROBBANÁST A KOORDINÁTÁN!
+    createCinematicExplosion(data.x, data.z, data.hit);
+    
     if (isMe) {
-        createFogExplosion(data.x, data.z, data.hit);
         if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'system');
         else logMessage(`💦 Mellé. Csobbanás a tengerben. (X:${data.x}, Z:${data.z})`, 'system');
     } else {
-        createGridMarker(data.x, data.z, data.hit);
+        createGridMarker(data.x, data.z, data.hit); // A saját radarodon marad a jelölő is
         if (data.hit) logMessage(`⚠️ FIGYELEM! Eltalálták egy hajónkat! (X:${data.x}, Z:${data.z})`, 'enemy');
         else logMessage(`Közel volt... Az ellenfél mellélőtt. (X:${data.x}, Z:${data.z})`, 'enemy');
     }
