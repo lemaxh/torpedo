@@ -3,7 +3,7 @@
  */
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-const clock = new THREE.Clock(); // IDŐZÍTŐ A FOLYAMATOS VÍZHEZ
+const clock = new THREE.Clock();
 
 const ownFleetGroup = new THREE.Group();
 const enemyWatersGroup = new THREE.Group();
@@ -35,7 +35,6 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
-// JAVÍTOTT VÍZ: Stabil Textúra URL
 const waterNormals = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/r128/examples/textures/waternormals.jpg');
 waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
 
@@ -68,7 +67,7 @@ const planeIntersect = new THREE.Vector3();
 const particlesArray = []; 
 
 function createCinematicExplosion(x, z, isHit) {
-    const particleCount = isHit ? 250 : 120; // Találatnál robosztusabb
+    const particleCount = isHit ? 250 : 120; 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const velocities = [];
@@ -82,7 +81,6 @@ function createCinematicExplosion(x, z, isHit) {
         let vx, vy, vz, color;
 
         if (isHit) {
-            // TALÁLAT: Szétszóródó gömb (tűz és sötét füst)
             vx = (Math.random() - 0.5) * 0.4;
             vy = (Math.random() * 0.5) + 0.1;
             vz = (Math.random() - 0.5) * 0.4;
@@ -90,11 +88,9 @@ function createCinematicExplosion(x, z, isHit) {
             const isSmoke = Math.random() > 0.5;
             color = isSmoke ? new THREE.Color(0x222222) : new THREE.Color(Math.random() > 0.5 ? 0xff4400 : 0xffaa00);
         } else {
-            // MELLÉ: Magas, keskeny vízoszlop
             vx = (Math.random() - 0.5) * 0.15; 
             vy = (Math.random() * 0.8) + 0.2;  
             vz = (Math.random() - 0.5) * 0.15;
-            
             color = new THREE.Color(0xaaaaaa).lerp(new THREE.Color(0xffffff), Math.random());
         }
 
@@ -118,7 +114,7 @@ function createCinematicExplosion(x, z, isHit) {
     const particleSystem = new THREE.Points(geometry, material);
     enemyWatersGroup.add(particleSystem); 
 
-    const decayRate = isHit ? 0.008 : 0.02; // A vízoszlop gyorsabban esik le
+    const decayRate = isHit ? 0.008 : 0.02;
     particlesArray.push({ system: particleSystem, velocities: velocities, life: 1.0, decay: decayRate });
 }
 
@@ -209,7 +205,6 @@ function updateGhostShip() {
     }
 }
 
-// Célkereszt
 const targetGeometry = new THREE.RingGeometry(0.3, 0.5, 16);
 const targetMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
 const targetReticle = new THREE.Mesh(targetGeometry, targetMaterial);
@@ -237,7 +232,6 @@ function animate() {
         water.material.uniforms['time'].value += delta; 
     }
 
-    // Részecskék fizikája
     for (let i = particlesArray.length - 1; i >= 0; i--) {
         let pObj = particlesArray[i];
         let positions = pObj.system.geometry.attributes.position.array;
@@ -246,7 +240,7 @@ function animate() {
         pObj.system.material.opacity = pObj.life;
 
         for (let j = 0; j < pObj.velocities.length; j++) {
-            pObj.velocities[j].y -= 0.005; // Gravitáció
+            pObj.velocities[j].y -= 0.005; 
             
             positions[j * 3] += pObj.velocities[j].x;
             positions[j * 3 + 1] += pObj.velocities[j].y;
@@ -296,12 +290,6 @@ const shipCountSpan = document.getElementById('ship-count');
 const readyBtn = document.getElementById('readyBtn');
 const turnIndicator = document.getElementById('turn-indicator');
 
-// Radar UI Elemek
-const radarOverlay = document.getElementById('radar-overlay');
-const radarGrid = document.getElementById('radar-grid');
-const viewRadarBtn = document.getElementById('viewRadarBtn');
-const closeRadarBtn = document.getElementById('closeRadarBtn');
-
 function logMessage(msg, type = 'system') {
     const p = document.createElement('p');
     p.innerHTML = msg;
@@ -316,7 +304,7 @@ function switchView(view) {
         renderer.setClearColor(0x111111);
         ownFleetGroup.visible = true;
         enemyWatersGroup.visible = false;
-        logMessage("👁️ Váltás: Saját Flotta Nézet", "system");
+        logMessage("👁️ Váltás: Saját Flotta", "system");
     } else if (view === 'offensive') {
         scene.fog = new THREE.FogExp2(0xdddddd, 0.06); 
         renderer.setClearColor(0xdddddd);
@@ -326,16 +314,12 @@ function switchView(view) {
     }
 }
 
-document.getElementById('viewDefensiveBtn').addEventListener('click', () => switchView('defensive'));
-document.getElementById('viewOffensiveBtn').addEventListener('click', () => switchView('offensive'));
-
 /**
  * --- ÚJ ZSEBRADAR LOGIKA ÉS GENERÁLÁS ---
  */
 const pocketRadar = document.getElementById('pocket-radar');
 const radarHandle = document.getElementById('radar-handle');
 
-// Zsebradar nyitása/csukása
 radarHandle.addEventListener('click', () => {
     pocketRadar.classList.toggle('open');
     if (pocketRadar.classList.contains('open')) {
@@ -346,7 +330,6 @@ radarHandle.addEventListener('click', () => {
     }
 });
 
-// A radar felépítése és a lövés esemény
 function buildRadarGrid() {
     const radarGrid = document.getElementById('radar-grid');
     radarGrid.innerHTML = '';
@@ -371,7 +354,7 @@ function buildRadarGrid() {
                 // Lövés elküldése
                 socket.emit('shoot', { x: snappedX, z: snappedZ });
                 
-                // Radar automatikus visszacsukása lövés után
+                // Radar visszacsukása automatikusan
                 pocketRadar.classList.remove('open');
                 radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
             });
@@ -379,6 +362,7 @@ function buildRadarGrid() {
         }
     }
 }
+
 /**
  * --- 3. JÁTÉKOS INTERAKCIÓK (Egér pakolás) ---
  */
@@ -503,7 +487,6 @@ socket.on('battle_begins', (msg) => {
     isPlayingPhase = true;
 });
 
-// KÖR FRISSÍTÉSE ÉS UI KEZELÉS
 socket.on('turn_update', (activePlayerId) => {
     isMyTurn = (activePlayerId === socket.id);
     
@@ -513,7 +496,10 @@ socket.on('turn_update', (activePlayerId) => {
     } else {
         turnIndicator.className = 'turn-status enemy-turn';
         turnIndicator.innerText = "🔴 ELLENFÉL KÖRE... Készülj a becsapódásra!";
-        if (radarOverlay) radarOverlay.style.display = 'none'; // Bezárja a radart, ha nyitva volt
+        if (pocketRadar) {
+            pocketRadar.classList.remove('open');
+            radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
+        }
     }
 });
 
@@ -524,7 +510,7 @@ socket.on('shot_result', (data) => {
         myShotsOnRadar[`${data.x},${data.z}`] = data.hit ? 'hit' : 'miss';
         
         // --- AUTOMATIKUS KAMERA ÁTMENET ---
-        switchView('offensive'); // Átváltunk a ködös/becsapódás nézetre
+        switchView('offensive'); 
         
         targetReticle.position.set(data.x, 0.1, data.z);
         targetReticle.visible = true;
@@ -535,7 +521,6 @@ socket.on('shot_result', (data) => {
 
         if (data.sunk) logMessage(`☠️ TALÁLT, SÜLLYEDT! Egy ellenséges hajó megsemmisült!`, 'hit');
 
-        // 3 MÁSODPERC MÚLVA VISSZATÉRÜNK A FLOTTA NÉZETBE
         setTimeout(() => {
             switchView('defensive');
             targetReticle.visible = false;
