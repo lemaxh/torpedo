@@ -35,6 +35,27 @@ scene.add(ambientLight);
 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); 
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
+// víz
+// --- ÚJRA: REALISZTIKUS VÍZ SZIMULÁCIÓ ---
+const waterGeometry = new THREE.PlaneGeometry(1000, 1000);
+const water = new THREE.Water(
+    waterGeometry,
+    {
+        textureWidth: 512,
+        textureHeight: 512,
+        waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg', function (texture) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        }),
+        sunDirection: directionalLight.position.clone().normalize(),
+        sunColor: 0xffffff,
+        waterColor: 0x001e0f, // Sötét tengerészkék
+        distortionScale: 3.7,
+        fog: scene.fog !== undefined
+    }
+);
+water.rotation.x = -Math.PI / 2;
+water.position.y = -0.05; // Picit a rács alá tesszük, hogy ne nyelje el a vonalakat
+scene.add(water);
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -157,9 +178,15 @@ const placedShips = [];
 const maxShips = 5;
 
 // Animációs ciklus
+// Animációs ciklus
 function animate() {
     requestAnimationFrame(animate);
+    
     controls.update(); // Kamera fizika frissítése
+    
+    // Víz hullámzásának animálása
+    water.material.uniforms['time'].value += 1.0 / 60.0;
+    
     renderer.render(scene, camera);
 }
 animate();
