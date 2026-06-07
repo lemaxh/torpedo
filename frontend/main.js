@@ -441,7 +441,36 @@ window.addEventListener('click', (event) => {
 /**
  * --- 4. HÁLÓZATI ESEMÉNYEK ---
  */
-createRoomBtn.addEventListener('click', () => { socket.emit('create_room'); });
+/**
+ * --- 4. HÁLÓZATI ESEMÉNYEK (ÉS SZERVER KAPCSOLAT) ---
+ */
+
+// ALAPÉRTELMEZETT: Gombok letiltása, amíg nincs kapcsolat
+createRoomBtn.disabled = true;
+joinRoomBtn.disabled = true;
+statusDisplay.innerText = "⏳ Szerver ébresztése... (Akár 30-50 mp is lehet)";
+statusDisplay.style.color = "orange";
+
+// HA SIKERESEN CSATLAKOZOTT A SOCKET.IO
+socket.on('connect', () => {
+    statusDisplay.innerText = "✅ Szerver elérhető! Készen áll a parancsokra.";
+    statusDisplay.style.color = "#0f0";
+    createRoomBtn.disabled = false;
+    joinRoomBtn.disabled = false;
+});
+
+// HA MEGSZAKAD A KAPCSOLAT
+socket.on('disconnect', () => {
+    statusDisplay.innerText = "❌ Kapcsolat megszakadt a szerverrel!";
+    statusDisplay.style.color = "red";
+    createRoomBtn.disabled = true;
+    joinRoomBtn.disabled = true;
+});
+
+createRoomBtn.addEventListener('click', () => { 
+    socket.emit('create_room'); 
+});
+
 joinRoomBtn.addEventListener('click', () => {
     const code = roomCodeInput.value.trim().toUpperCase();
     if (code.length > 0) socket.emit('join_room', code);
