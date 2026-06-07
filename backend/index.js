@@ -15,7 +15,6 @@ app.get('/', (req, res) => {
   res.send('A 3D Torpedó szerver hibátlanul fut és várja a játékosokat!');
 });
 
-// A Monitor panel marad a régi (Admin Dashboard)
 app.get('/monitor', (req, res) => {
   let html = `<!DOCTYPE html><html lang="hu"><head><meta charset="UTF-8"><title>Szerver Monitor</title><style>body { font-family: monospace; background: #111; color: #0f0; padding: 20px; } .room { border: 1px solid #333; margin-bottom: 15px; padding: 15px; background: #000; } .waiting { color: #ff0; } .planning { color: #0ff; } .playing { color: #f55; } h1 { border-bottom: 1px solid #0f0; padding-bottom: 10px; }</style></head><body><h1>📡 Torpedó Szerver: Aktív Szobák</h1>`;
   const roomCodes = Object.keys(activeRooms);
@@ -30,7 +29,7 @@ app.get('/monitor', (req, res) => {
   res.send(html);
 });
 
-// --- JAVÍTOTT ÜTKÖZÉSVIZSGÁLAT (Visszaadja a meglőtt hajó indexét) ---
+// Ütközésvizsgálat (Visszaadja a meglőtt hajó indexét)
 function checkHitIndex(shot, ships) {
   for (let i = 0; i < ships.length; i++) {
     let ship = ships[i];
@@ -44,15 +43,13 @@ function checkHitIndex(shot, ships) {
     let localX = dx * Math.cos(angle) - dz * Math.sin(angle);
     let localZ = dx * Math.sin(angle) + dz * Math.cos(angle);
 
-    // Benne van-e a lövés a hajó téglalapjában?
     if (Math.abs(localX) <= (width / 2) + 0.2 && Math.abs(localZ) <= (length / 2) + 0.2) {
-      return i; // Visszaadja, hogy HANYADIK hajót találtuk el
+      return i; 
     }
   }
-  return -1; // Mellé
+  return -1; 
 }
 
-// --- HÁLÓZATI LOGIKA ---
 io.on('connection', (socket) => {
   console.log('Új gép csatlakozott. ID:', socket.id);
   let currentRoom = null;
@@ -65,7 +62,7 @@ io.on('connection', (socket) => {
     activeRooms[roomCode] = {
       status: 'waiting',
       players: [socket.id],
-      currentTurn: null, // Új: Kinek a köre van
+      currentTurn: null, 
       p1_shots: 0, p2_shots: 0,
       p1_ready: false, p2_ready: false,
       p1_ships: [], p2_ships: []
@@ -89,7 +86,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // A JÁTÉKOS LERAKTA A HAJÓIT
   socket.on('ships_ready', (ships) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
@@ -102,23 +98,21 @@ io.on('connection', (socket) => {
         room.p2_ships = ships;
       }
 
-      // Ha mindkét fél rányomott a Kész gombra
       if (room.p1_ready && room.p2_ready) {
         room.status = 'playing';
-        room.currentTurn = room.players[0]; // A P1 kezd mindig
-
+        room.currentTurn = room.players[0]; // P1 kezd
+        
         io.to(currentRoom).emit('battle_begins', 'Mindkét flotta készen áll! Kezdődik a harc!');
         io.to(currentRoom).emit('turn_update', room.currentTurn);
       }
     }
   });
 
-  // LÖVÉS LEADÁSA (Turn-based logic & HP Check)
   socket.on('shoot', (data) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
       
-      // Biztonsági ellenőrzés: Csak az lőhet, aki következik
+      // BIZTONSÁG: Csak az lőhet, aki következik
       if (room.currentTurn !== socket.id) return;
 
       let targetShips = [];
@@ -131,28 +125,25 @@ io.on('connection', (socket) => {
         targetShips = room.p1_ships;
       }
 
-      // ÜTKÖZÉSVIZSGÁLAT!
       const hitIndex = checkHitIndex(data, targetShips);
       const isHit = (hitIndex !== -1);
       let isSunk = false;
       let gameOver = false;
 
       if (isHit) {
-        targetShips[hitIndex].hp -= 1; // Életerő csökkentése
+        targetShips[hitIndex].hp -= 1;
         if (targetShips[hitIndex].hp <= 0) {
           isSunk = true;
-          targetShips[hitIndex].hp = 0; // Biztosíték
+          targetShips[hitIndex].hp = 0;
         }
       }
 
-      // Győzelem ellenőrzése (Minden ellenséges hajó hp-ja 0)
       const aliveShips = targetShips.filter(ship => ship.hp > 0).length;
       if (aliveShips === 0) gameOver = true;
 
       // Kör átadása a másik játékosnak
       room.currentTurn = (room.players[0] === socket.id) ? room.players[1] : room.players[0];
 
-      // Eredmény kiküldése MINDENKINEK a szobában
       io.to(currentRoom).emit('shot_result', {
         x: data.x,
         z: data.z,
@@ -162,7 +153,6 @@ io.on('connection', (socket) => {
         shooter: socket.id 
       });
 
-      // Új kör bejelentése (kivéve ha vége a játéknak)
       if (!gameOver) {
         io.to(currentRoom).emit('turn_update', room.currentTurn);
       }
