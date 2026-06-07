@@ -330,9 +330,25 @@ document.getElementById('viewDefensiveBtn').addEventListener('click', () => swit
 document.getElementById('viewOffensiveBtn').addEventListener('click', () => switchView('offensive'));
 
 /**
- * --- RADAR LOGIKA ÉS GENERÁLÁS ---
+ * --- ÚJ ZSEBRADAR LOGIKA ÉS GENERÁLÁS ---
  */
+const pocketRadar = document.getElementById('pocket-radar');
+const radarHandle = document.getElementById('radar-handle');
+
+// Zsebradar nyitása/csukása
+radarHandle.addEventListener('click', () => {
+    pocketRadar.classList.toggle('open');
+    if (pocketRadar.classList.contains('open')) {
+        radarHandle.innerText = "📡 Taktikai Radar (Kattints a bezáráshoz)";
+        buildRadarGrid(); 
+    } else {
+        radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
+    }
+});
+
+// A radar felépítése és a lövés esemény
 function buildRadarGrid() {
+    const radarGrid = document.getElementById('radar-grid');
     radarGrid.innerHTML = '';
     for (let z = -10; z < 10; z++) {
         for (let x = -10; x < 10; x++) {
@@ -355,26 +371,14 @@ function buildRadarGrid() {
                 // Lövés elküldése
                 socket.emit('shoot', { x: snappedX, z: snappedZ });
                 
-                // Kamera áthelyezése
-                targetReticle.position.set(snappedX, 0.1, snappedZ);
-                targetReticle.visible = true;
-                
-                radarOverlay.style.display = 'none';
-                switchView('offensive');
+                // Radar automatikus visszacsukása lövés után
+                pocketRadar.classList.remove('open');
+                radarHandle.innerText = "📡 Taktikai Radar (Kattints a nyitáshoz)";
             });
             radarGrid.appendChild(cell);
         }
     }
 }
-
-viewRadarBtn.addEventListener('click', () => {
-    buildRadarGrid();
-    radarOverlay.style.display = 'block';
-});
-closeRadarBtn.addEventListener('click', () => {
-    radarOverlay.style.display = 'none';
-});
-
 /**
  * --- 3. JÁTÉKOS INTERAKCIÓK (Egér pakolás) ---
  */
