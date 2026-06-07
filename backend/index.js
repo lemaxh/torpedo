@@ -23,42 +23,34 @@ app.get('/monitor', (req, res) => {
   else {
     roomCodes.forEach(code => {
       const room = activeRooms[code];
-      html += `<div class="room"><strong>Szobakód:</strong> <span style="font-size: 1.2em;">${code}</span> <br><br><strong>Fázis:</strong> <span class="${room.status}">${room.status.toUpperCase()}</span> <br><strong>Játékosok:</strong> ${room.players.length} / 2 <br><strong>Leadott lövések:</strong> P1: ${room.p1_shots} db | P2: ${room.p2_shots} db</div>`;
+      html += `<div class="room"><strong>Szobakód:</strong> <span style="font-size: 1.2em;">${code}</span> <br><br><strong>Fázis:</strong> <span class="${room.status}">${room.status.toUpperCase()}</span> <br><strong>Játékosok:</strong> ${room.players.length} / 2 <br><strong>Körön lévő:</strong> ${room.currentTurn === room.players[0] ? 'P1' : 'P2'} <br><strong>Leadott lövések:</strong> P1: ${room.p1_shots} db | P2: ${room.p2_shots} db</div>`;
     });
   }
   html += `<script>setTimeout(() => location.reload(), 5000);</script></body></html>`;
   res.send(html);
 });
 
+// --- JAVÍTOTT ÜTKÖZÉSVIZSGÁLAT (Visszaadja a meglőtt hajó indexét) ---
+function checkHitIndex(shot, ships) {
+  for (let i = 0; i < ships.length; i++) {
+    let ship = ships[i];
+    let length = ship.length;
+    let width = 1; 
 
-// --- MATEMATIKAI ÜTKÖZÉSVIZSGÁLAT ---
-function checkHit(shot, ships) {
-  for (let ship of ships) {
-    // 1. A fájlnév alapján kitaláljuk, milyen hosszú a hajó a rácson
-    let length = 2; 
-    if (ship.id.includes('3helyes')) length = 3;
-    else if (ship.id.includes('4helyes')) length = 4;
-    else if (ship.id.includes('5helyes')) length = 5;
-
-    let width = 1; // Minden hajó 1 négyzet széles
-
-    // 2. Kiszámoljuk a távolságot a lövés és a hajó közepe között
     let dx = shot.x - ship.x;
     let dz = shot.z - ship.z;
 
-    // 3. Inverz forgatás (Visszaforgatjuk a lövést a hajó dőlésszögével ellentétesen)
     let angle = -ship.rotationY; 
     let localX = dx * Math.cos(angle) - dz * Math.sin(angle);
     let localZ = dx * Math.sin(angle) + dz * Math.cos(angle);
 
-    // 4. Benne van-e a lövés a hajó téglalapjában? (0.2 ráhagyással a kerekítések miatt)
+    // Benne van-e a lövés a hajó téglalapjában?
     if (Math.abs(localX) <= (width / 2) + 0.2 && Math.abs(localZ) <= (length / 2) + 0.2) {
-      return true; // TALÁLAT!
+      return i; // Visszaadja, hogy HANYADIK hajót találtuk el
     }
   }
-  return false; // MELLÉ!
+  return -1; // Mellé
 }
-
 
 // --- HÁLÓZATI LOGIKA ---
 io.on('connection', (socket) => {
@@ -73,6 +65,7 @@ io.on('connection', (socket) => {
     activeRooms[roomCode] = {
       status: 'waiting',
       players: [socket.id],
+      currentTurn: null, // Új: Kinek a köre van
       p1_shots: 0, p2_shots: 0,
       p1_ready: false, p2_ready: false,
       p1_ships: [], p2_ships: []
@@ -112,18 +105,24 @@ io.on('connection', (socket) => {
       // Ha mindkét fél rányomott a Kész gombra
       if (room.p1_ready && room.p2_ready) {
         room.status = 'playing';
+        room.currentTurn = room.players[0]; // A P1 kezd mindig
+
         io.to(currentRoom).emit('battle_begins', 'Mindkét flotta készen áll! Kezdődik a harc!');
+        io.to(currentRoom).emit('turn_update', room.currentTurn);
       }
     }
   });
 
-  // LÖVÉS LEADÁSA
+  // LÖVÉS LEADÁSA (Turn-based logic & HP Check)
   socket.on('shoot', (data) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
+      
+      // Biztonsági ellenőrzés: Csak az lőhet, aki következik
+      if (room.currentTurn !== socket.id) return;
+
       let targetShips = [];
       
-      // Megnézzük, ki lőtt, és kinek a hajóit kell vizsgálni
       if (room.players[0] === socket.id) {
         room.p1_shots++;
         targetShips = room.p2_ships;
@@ -133,15 +132,40 @@ io.on('connection', (socket) => {
       }
 
       // ÜTKÖZÉSVIZSGÁLAT!
-      const isHit = checkHit(data, targetShips);
+      const hitIndex = checkHitIndex(data, targetShips);
+      const isHit = (hitIndex !== -1);
+      let isSunk = false;
+      let gameOver = false;
+
+      if (isHit) {
+        targetShips[hitIndex].hp -= 1; // Életerő csökkentése
+        if (targetShips[hitIndex].hp <= 0) {
+          isSunk = true;
+          targetShips[hitIndex].hp = 0; // Biztosíték
+        }
+      }
+
+      // Győzelem ellenőrzése (Minden ellenséges hajó hp-ja 0)
+      const aliveShips = targetShips.filter(ship => ship.hp > 0).length;
+      if (aliveShips === 0) gameOver = true;
+
+      // Kör átadása a másik játékosnak
+      room.currentTurn = (room.players[0] === socket.id) ? room.players[1] : room.players[0];
 
       // Eredmény kiküldése MINDENKINEK a szobában
       io.to(currentRoom).emit('shot_result', {
         x: data.x,
         z: data.z,
         hit: isHit,
-        shooter: socket.id // Ebből tudja majd a kliens, hogy ő lőtt-e, vagy őt lőtték
+        sunk: isSunk,
+        gameOver: gameOver,
+        shooter: socket.id 
       });
+
+      // Új kör bejelentése (kivéve ha vége a játéknak)
+      if (!gameOver) {
+        io.to(currentRoom).emit('turn_update', room.currentTurn);
+      }
     }
   });
 
