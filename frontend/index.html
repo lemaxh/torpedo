@@ -104,36 +104,102 @@
         }
 
         /* RADAR HUD */
-        #radar-overlay {
-            display: none;
+       /* --- ÚJ ZSEBRADAR STÍLUSOK --- */
+        #pocket-radar {
+            position: fixed;
+            bottom: -360px; /* Rejtett állapot (csak a fül látszik) */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 360px;
+            height: 390px;
+            background: rgba(0, 15, 0, 0.95);
+            border: 2px solid #0f0;
+            border-bottom: none;
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+            transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100;
+            box-shadow: 0 -5px 20px rgba(0, 255, 0, 0.2);
+        }
+        #pocket-radar:hover:not(.open) {
+            bottom: -340px; /* Rámutatáskor picit feljebb bukkan */
+        }
+        #pocket-radar.open {
+            bottom: 0; /* Teljesen kinyitva */
+        }
+        #radar-handle {
+            width: 100%;
+            height: 30px;
+            background: #003300;
+            color: #0f0;
+            text-align: center;
+            font-weight: bold;
+            line-height: 30px;
+            cursor: pointer;
+            border-top-left-radius: 13px;
+            border-top-right-radius: 13px;
+            border-bottom: 1px solid #0f0;
+            user-select: none;
+        }
+        #radar-handle:hover { background: #005500; }
+        
+        #radar-content {
+            position: relative;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            height: 350px;
+        }
+        
+        #radar-grid {
+            display: grid;
+            grid-template-columns: repeat(20, 15px);
+            grid-template-rows: repeat(20, 15px);
+            gap: 1px;
+            background: #002200;
+            border: 2px solid #0f0;
+            position: relative;
+            z-index: 2; /* Söprés felett maradjon a rács kattinthatósága */
+        }
+        
+        .radar-cell {
+            background: rgba(0, 255, 0, 0.05);
+            cursor: crosshair;
+        }
+        .radar-cell:hover { background: rgba(0, 255, 0, 0.6); }
+        .radar-cell.miss { background: #555; cursor: not-allowed; }
+        .radar-cell.hit { background: #f55; cursor: not-allowed; }
+
+        /* Vizuális szétválasztás a rács közepén */
+        .radar-crosshair-x, .radar-crosshair-y {
+            position: absolute;
+            background: rgba(0, 255, 0, 0.8);
+            pointer-events: none;
+            z-index: 3;
+        }
+        .radar-crosshair-x { top: 50%; left: 25px; right: 25px; height: 2px; transform: translateY(-50%); box-shadow: 0 0 5px #0f0;}
+        .radar-crosshair-y { left: 50%; top: 25px; bottom: 25px; width: 2px; transform: translateX(-50%); box-shadow: 0 0 5px #0f0;}
+
+        /* Forgó radarsöprés animáció */
+        .radar-sweep {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 15, 0, 0.95);
-            border: 2px solid #0f0;
-            padding: 25px;
-            border-radius: 10px;
-            z-index: 100;
-            box-shadow: 0 0 50px rgba(0, 255, 0, 0.2);
+            width: 450px;
+            height: 450px;
+            background: conic-gradient(from 0deg, rgba(0,255,0,0) 70%, rgba(0,255,0,0.5) 100%);
+            border-radius: 50%;
+            transform-origin: 0 0;
+            animation: sweep 3s linear infinite;
+            pointer-events: none;
+            z-index: 1;
         }
-        #radar-grid {
-            display: grid;
-            grid-template-columns: repeat(20, 25px);
-            grid-template-rows: repeat(20, 25px);
-            gap: 1px;
-            background: #003300;
-            border: 2px solid #0f0;
-            margin: 0 auto;
+        @keyframes sweep {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .radar-cell {
-            background: rgba(0, 255, 0, 0.1);
-            cursor: crosshair;
-            transition: background 0.2s;
-        }
-        .radar-cell:hover { background: rgba(0, 255, 0, 0.5); }
-        .radar-cell.miss { background: #555; cursor: not-allowed; }
-        .radar-cell.hit { background: #f55; cursor: not-allowed; }
     </style>
 </head>
 <body>
