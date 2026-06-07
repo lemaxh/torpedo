@@ -499,7 +499,36 @@ socket.on('battle_begins', (msg) => {
     gameArea.style.display = 'block';
     isPlayingPhase = true;
 });
+// A játékos saját állapotának tárolása
+let isMyTurn = false; 
+const turnIndicator = document.getElementById('turn-indicator');
 
+// SZERVER: Körök váltása
+socket.on('turn_update', (activePlayerId) => {
+    isMyTurn = (activePlayerId === socket.id);
+    
+    if (isMyTurn) {
+        turnIndicator.innerText = "🟢 A TE KÖRED: Tűzparancs engedélyezve!";
+        turnIndicator.style.borderColor = "#0f0";
+        turnIndicator.style.color = "#0f0";
+        turnIndicator.style.background = "rgba(0, 255, 0, 0.1)";
+    } else {
+        turnIndicator.innerText = "🔴 ELLENFÉL KÖRE: Várd meg a lövését!";
+        turnIndicator.style.borderColor = "#f55";
+        turnIndicator.style.color = "#f55";
+        turnIndicator.style.background = "rgba(255, 0, 0, 0.1)";
+    }
+});
+
+// A lövés leadásának korlátozása (ne lehessen akkor lőni, amikor nem te jössz)
+// Ezt a függvényt (pl. ahol a lövést indítod) egészítsd ki:
+function handleShoot(x, z) {
+    if (!isMyTurn) {
+        logMessage("⚠️ Még nem te jössz!", "enemy");
+        return;
+    }
+    socket.emit('shoot', { x, z });
+}
 // KÖR FRISSÍTÉSE
 socket.on('turn_update', (activePlayerId) => {
     isMyTurn = (activePlayerId === socket.id);
