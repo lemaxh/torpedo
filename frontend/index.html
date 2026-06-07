@@ -182,11 +182,14 @@
         <div id="radar-log"></div>
     </div>
 
-    <div id="radar-overlay">
-        <h2 style="color: #0ff; margin-top: 0;">📡 Taktikai Radar</h2>
-        <p style="text-align: center; color: #0f0; margin-top: -5px; margin-bottom: 15px;">Kattints egy koordinátára a kilövéshez!</p>
-        <div id="radar-grid"></div>
-        <button id="closeRadarBtn" style="margin-top: 20px;">Vissza a parancsnokságra</button>
+    <div id="pocket-radar">
+        <div id="radar-handle">📡 Taktikai Radar (Kattints a nyitáshoz)</div>
+        <div id="radar-content">
+            <div id="radar-grid"></div>
+            <div class="radar-crosshair-x"></div>
+            <div class="radar-crosshair-y"></div>
+            <div class="radar-sweep"></div>
+        </div>
     </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
