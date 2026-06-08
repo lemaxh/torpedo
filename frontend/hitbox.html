@@ -16,6 +16,10 @@
         #code-output { background: #000; padding: 10px; border: 1px dashed #0f0; color: #0f0; font-family: monospace; white-space: pre-wrap; margin-top: 15px; font-size: 11px; }
         .help { font-size: 12px; color: #aaa; margin: 10px 0; background: #222; padding: 10px; border-left: 3px solid #0ff; }
         .action-row { display: flex; gap: 10px; margin-top: 15px; }
+        
+        .territory-badge { display: inline-block; padding: 3px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; margin-right: 5px; }
+        .bg-blue { background: rgba(0, 136, 255, 0.3); border: 1px solid #08f; }
+        .bg-red { background: rgba(255, 0, 0, 0.3); border: 1px solid #f00; }
     </style>
 </head>
 <body>
@@ -27,8 +31,10 @@
         
         <div class="help">
             <b>1. ILLESZTÉS:</b> Told a szürke modellt a zöld drótvázba.<br>
-            <b>2. TESZT:</b> Kattints a rácsra a lövéshez! (Piros = Találat, Szürke = Mellé).<br>
-            <i>Orbit kamera: Egér jobb gomb nyomva tartásával.</i>
+            <b>2. TESZT:</b> Kattints a rácsra a lövéshez!<br>
+            <span class="territory-badge bg-blue">KÉK TÉRFÉL</span> = Saját oldal (Z > 0)<br>
+            <span class="territory-badge bg-red">PIROS TÉRFÉL</span> = Ellenség (Köd felé, Z < 0)<br>
+            <i>Kamera: Egér jobb gomb (Forgatás), Görgő (Zoom).</i>
         </div>
 
         <div class="action-row">
@@ -78,23 +84,57 @@
         const canvasContainer = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         
+        // --- 1. KÖD ÉS HÁTTÉR BEÁLLÍTÁSA ---
+        scene.fog = new THREE.Fog(0x111111, 10, 25); // Fix felhőszerű köd a távolban
+        
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 10, 10); 
+        camera.position.set(0, 8, 12); // Picit lejjebb és közelebb a saját térfél felől
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x111111); // A háttér is egyezzen a köd színével
         canvasContainer.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        // Letiltjuk a bal klikkes forgatást, hogy tudjunk lőni vele! Jobb klikkel lehet kamerát mozgatni.
         controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+        
+        // --- 2. KAMERA KORLÁTOZÁSOK ---
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // Nem engedi a talajszint alá a kamerát
+        controls.minDistance = 3.5; // Nem enged túlzottan ráközelíteni (megelőzi a modell eltűnését/clippinget)
+        controls.maxDistance = 30.0; // Nem enged a végtelenbe kizoomolni
 
+        // --- 3. TÉRKÉP, HATÁROK ÉS TÉRFELEK ---
         const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
         scene.add(gridHelper);
         const axesHelper = new THREE.AxesHelper(3); 
         scene.add(axesHelper);
 
+        // Zöld határvonal a középvonalon (Z = 0)
+        const borderGeo = new THREE.BoxGeometry(20, 0.05, 0.05);
+        const borderMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const borderLine = new THREE.Mesh(borderGeo, borderMat);
+        borderLine.position.set(0, 0.01, 0);
+        scene.add(borderLine);
+
+        // Vizuális zónajelölők a rács alá
+        // Ellenség térfele (Köd felé, pirosas)
+        const enemyPlaneGeo = new THREE.PlaneGeometry(20, 10);
+        const enemyPlaneMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.05, side: THREE.DoubleSide });
+        const enemyPlane = new THREE.Mesh(enemyPlaneGeo, enemyPlaneMat);
+        enemyPlane.rotation.x = -Math.PI / 2;
+        enemyPlane.position.set(0, -0.01, -5); 
+        scene.add(enemyPlane);
+
+        // Saját térfél (Kamera felől, kékes)
+        const ownPlaneGeo = new THREE.PlaneGeometry(20, 10);
+        const ownPlaneMat = new THREE.MeshBasicMaterial({ color: 0x0088ff, transparent: true, opacity: 0.05, side: THREE.DoubleSide });
+        const ownPlane = new THREE.Mesh(ownPlaneGeo, ownPlaneMat);
+        ownPlane.rotation.x = -Math.PI / 2;
+        ownPlane.position.set(0, -0.01, 5); 
+        scene.add(ownPlane);
+
+        // Fények
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1);
         dirLight.position.set(5, 10, 5);
@@ -108,11 +148,11 @@
         let shotMarkers = [];
 
         const hitboxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-        let mainWrapper = new THREE.Group(); // Ez fogja össze a Hitboxot és a Látványt
+        let mainWrapper = new THREE.Group(); 
         scene.add(mainWrapper);
         
         let currentHitbox = null;
-        let gameRotationY = 0; // Játéktér forgatása (szimulált 'R' gomb)
+        let gameRotationY = 0; 
 
         const configs = [
             { file: '2helyes.glb', length: 2, scale: 0.10, rotX: 90, rotY: 0, rotZ: 90, posX: -3.95, posY: 1.20, posZ: -0.40 },
@@ -152,7 +192,6 @@
         });
 
         function displayModel(index) {
-            // Nullázzuk a forgatást váltásnál
             gameRotationY = 0;
             mainWrapper.rotation.y = 0;
             clearShots();
@@ -205,29 +244,23 @@
             generateCode();
         }
 
-        // --- ÚJ: MATEMATIKAI ÜTKÖZÉSVIZSGÁLAT (PONT MINT A SZERVEREN) ---
         function checkHitMath(shotX, shotZ) {
             const index = selectEl.value;
             const cfg = configs[index];
             
-            // A hajó "szerver szerinti" helye most a [0,0]
             let dx = shotX - 0; 
             let dz = shotZ - 0;
 
-            // Visszaforgatás
             let angle = -gameRotationY; 
             let localX = dx * Math.cos(angle) - dz * Math.sin(angle);
             let localZ = dx * Math.sin(angle) + dz * Math.cos(angle);
 
-            // Vizsgálat: 1 széles, cfg.length hosszú dobozban van-e
-            // 0.2 a ráhagyás a kerekítések miatt
             if (Math.abs(localX) <= 0.7 && Math.abs(localZ) <= (cfg.length / 2) + 0.2) {
                 return true;
             }
             return false;
         }
 
-        // --- ÚJ: LÖVÉS LEADÁSA KATTINTÁSRA ---
         window.addEventListener('click', (event) => {
             if (event.target !== renderer.domElement) return;
 
@@ -237,14 +270,11 @@
             raycaster.setFromCamera(mouse, camera);
             raycaster.ray.intersectPlane(plane, planeIntersect);
 
-            // Rácsra kerekítés
             const shotX = Math.floor(planeIntersect.x) + 0.5;
             const shotZ = Math.floor(planeIntersect.z) + 0.5;
 
-            // Számolás
             const isHit = checkHitMath(shotX, shotZ);
 
-            // Jelölő lerakása
             const markerGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
             const markerMat = new THREE.MeshBasicMaterial({ color: isHit ? 0xff0000 : 0x555555 });
             const marker = new THREE.Mesh(markerGeo, markerMat);
@@ -254,9 +284,8 @@
             shotMarkers.push(marker);
         });
 
-        // --- GOMBOK ---
         document.getElementById('rotateBtn').addEventListener('click', () => {
-            gameRotationY += Math.PI / 2; // 90 fok
+            gameRotationY += Math.PI / 2;
             mainWrapper.rotation.y = gameRotationY;
         });
 
