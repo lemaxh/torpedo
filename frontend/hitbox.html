@@ -30,10 +30,10 @@
         <h3>🎯 Hitbox Lőtér & Illesztő</h3>
         
         <div class="help">
-            <b>1. ILLESZTÉS:</b> Told a szürke modellt a zöld drótvázba.<br>
+            <b>1. ILLESZTÉS:</b> Told a szürke modellt a zöld 1x1-es rácskockákba!<br>
             <b>2. TESZT:</b> Kattints a rácsra a lövéshez!<br>
             <span class="territory-badge bg-blue">KÉK TÉRFÉL</span> = Saját oldal (Z > 0)<br>
-            <span class="territory-badge bg-red">PIROS TÉRFÉL</span> = Ellenség (Köd felé, Z < 0)<br>
+            <span class="territory-badge bg-red">SZÜRKE KÖD</span> = Ellenség (Z < 0)<br>
             <i>Kamera: Egér jobb gomb (Forgatás), Görgő (Zoom).</i>
         </div>
 
@@ -84,25 +84,36 @@
         const canvasContainer = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         
-        // --- 1. KÖD ÉS HÁTTÉR BEÁLLÍTÁSA ---
-        scene.fog = new THREE.Fog(0x111111, 10, 25); // Fix felhőszerű köd a távolban
-        
+        // --- 1. KAMERA BEÁLLÍTÁSOK ---
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 8, 12); // Picit lejjebb és közelebb a saját térfél felől
+        camera.position.set(0, 10, 14); 
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x111111); // A háttér is egyezzen a köd színével
+        renderer.setClearColor(0x111111);
         canvasContainer.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
         
-        // --- 2. KAMERA KORLÁTOZÁSOK ---
-        controls.maxPolarAngle = Math.PI / 2 - 0.02; // Nem engedi a talajszint alá a kamerát
-        controls.minDistance = 3.5; // Nem enged túlzottan ráközelíteni (megelőzi a modell eltűnését/clippinget)
-        controls.maxDistance = 30.0; // Nem enged a végtelenbe kizoomolni
+        // KAMERA KORLÁTOZÁSOK (Zoom limit és talaj alá bukás gátlása)
+        controls.maxPolarAngle = Math.PI / 2 - 0.05; // Nem tudsz a pálya alá nézni
+        controls.minDistance = 12.0; // 3/4 ZOOM LIMIT: Nem enged ráközelíteni annyira, hogy kivágja a modellt
+        controls.maxDistance = 35.0; // Max távolság
+
+        // --- 2. FIZIKAI KÖD TÉGLALAP (Csak az ellenség térfelén) ---
+        // 20 széles, 8 magas, 10 mély doboz
+        const fogBoxGeo = new THREE.BoxGeometry(20, 8, 10);
+        const fogBoxMat = new THREE.MeshBasicMaterial({ 
+            color: 0x999999, 
+            transparent: true, 
+            opacity: 0.85, 
+            depthWrite: false 
+        });
+        const fogBox = new THREE.Mesh(fogBoxGeo, fogBoxMat);
+        fogBox.position.set(0, 4, -5); // Pálya közepe felett, Z negatív irányba eltolva
+        scene.add(fogBox);
 
         // --- 3. TÉRKÉP, HATÁROK ÉS TÉRFELEK ---
         const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
@@ -147,7 +158,7 @@
         const planeIntersect = new THREE.Vector3();
         let shotMarkers = [];
 
-        const hitboxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        const hitboxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 });
         let mainWrapper = new THREE.Group(); 
         scene.add(mainWrapper);
         
@@ -191,24 +202,43 @@
             displayModel(0);
         });
 
+        // Kiszámolja és eltolja a burkolót (wrapper), hogy a hitbox kockák pontosan beüljenek a négyzethálókba
+        function updateWrapperSnap() {
+            const index = parseInt(selectEl.value);
+            const cfg = configs[index];
+            const isRotated = Math.abs(gameRotationY % Math.PI) > 0.1;
+            
+            let cx = 0.5; let cz = 0.5;
+            if (isRotated) {
+                cx = (cfg.length % 2 === 0) ? 0 : 0.5;
+                cz = 0.5;
+            } else {
+                cx = 0.5;
+                cz = (cfg.length % 2 === 0) ? 0 : 0.5;
+            }
+            mainWrapper.position.set(cx, 0, cz);
+        }
+
         function displayModel(index) {
             gameRotationY = 0;
             mainWrapper.rotation.y = 0;
             clearShots();
 
-            while(mainWrapper.children.length > 0){ 
-                mainWrapper.remove(mainWrapper.children[0]); 
-            }
+            while(mainWrapper.children.length > 0){ mainWrapper.remove(mainWrapper.children[0]); }
             
             const cfg = configs[index];
 
-            // HITBOX
-            const geometry = new THREE.BoxGeometry(1, 1, cfg.length);
-            currentHitbox = new THREE.Mesh(geometry, hitboxMaterial);
-            currentHitbox.position.y = 0.5; 
+            // ÚJ HITBOX VIZUALIZÁCIÓ: Külön 1x1-es kockákból építjük fel, így pontosan látszik a rács kitöltése!
+            currentHitbox = new THREE.Group();
+            for (let i = 0; i < cfg.length; i++) {
+                const cellGeo = new THREE.BoxGeometry(0.95, 0.95, 0.95); // Picit kisebb mint 1, hogy látszódjon a padlórács
+                const cellMesh = new THREE.Mesh(cellGeo, hitboxMaterial);
+                const offset = - (cfg.length / 2) + 0.5 + i;
+                cellMesh.position.set(0, 0.5, offset); // Középtől számított eltolás
+                currentHitbox.add(cellMesh);
+            }
             mainWrapper.add(currentHitbox);
             
-            // LÁTVÁNY
             currentModelMesh = loadedModels[index];
             mainWrapper.add(currentModelMesh);
             
@@ -216,13 +246,14 @@
             rotXEl.value = cfg.rotX; rotYEl.value = cfg.rotY; rotZEl.value = cfg.rotZ;
             posXEl.value = cfg.posX; posYEl.value = cfg.posY; posZEl.value = cfg.posZ;
             
+            updateWrapperSnap();
             applyTransformations();
         }
 
         function applyTransformations() {
             if (!currentModelMesh) return;
             
-            const index = selectEl.value;
+            const index = parseInt(selectEl.value);
             const cfg = configs[index];
             
             cfg.scale = parseFloat(scaleEl.value);
@@ -244,23 +275,6 @@
             generateCode();
         }
 
-        function checkHitMath(shotX, shotZ) {
-            const index = selectEl.value;
-            const cfg = configs[index];
-            
-            let dx = shotX - 0; 
-            let dz = shotZ - 0;
-
-            let angle = -gameRotationY; 
-            let localX = dx * Math.cos(angle) - dz * Math.sin(angle);
-            let localZ = dx * Math.sin(angle) + dz * Math.cos(angle);
-
-            if (Math.abs(localX) <= 0.7 && Math.abs(localZ) <= (cfg.length / 2) + 0.2) {
-                return true;
-            }
-            return false;
-        }
-
         window.addEventListener('click', (event) => {
             if (event.target !== renderer.domElement) return;
 
@@ -273,7 +287,10 @@
             const shotX = Math.floor(planeIntersect.x) + 0.5;
             const shotZ = Math.floor(planeIntersect.z) + 0.5;
 
-            const isHit = checkHitMath(shotX, shotZ);
+            // FIZIKAI SUGÁR ELLENŐRZÉS: Fentről lefelé lőve eltalálja-e a hitbox kockákat?
+            const testRay = new THREE.Raycaster(new THREE.Vector3(shotX, 10, shotZ), new THREE.Vector3(0, -1, 0));
+            const intersects = testRay.intersectObject(currentHitbox, true);
+            const isHit = intersects.length > 0;
 
             const markerGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
             const markerMat = new THREE.MeshBasicMaterial({ color: isHit ? 0xff0000 : 0x555555 });
@@ -287,6 +304,7 @@
         document.getElementById('rotateBtn').addEventListener('click', () => {
             gameRotationY += Math.PI / 2;
             mainWrapper.rotation.y = gameRotationY;
+            updateWrapperSnap();
         });
 
         function clearShots() {
@@ -308,7 +326,7 @@
                 let ry = c.rotY === 0 ? "0" : `Math.PI * (${c.rotY}/180)`;
                 let rz = c.rotZ === 0 ? "0" : `Math.PI * (${c.rotZ}/180)`;
                 
-                code += `    { file: '${c.file}', scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz}, posX: ${c.posX.toFixed(2)}, posY: ${c.posY.toFixed(2)}, posZ: ${c.posZ.toFixed(2)} }${isLast ? '' : ','}\n`;
+                code += `    { file: '${c.file}', length: ${c.length}, scale: ${c.scale.toFixed(2)}, rotX: ${rx}, rotY: ${ry}, rotZ: ${rz}, posX: ${c.posX.toFixed(2)}, posY: ${c.posY.toFixed(2)}, posZ: ${c.posZ.toFixed(2)} }${isLast ? '' : ','}\n`;
             });
             code += `];`;
             codeOutput.innerText = code;
