@@ -52,7 +52,7 @@
         .turn-status.my-turn { border-color: #0f0; color: #0f0; background: rgba(0, 255, 0, 0.1); box-shadow: 0 0 15px rgba(0, 255, 0, 0.4); }
         .turn-status.enemy-turn { border-color: #f55; color: #f55; background: rgba(255, 0, 0, 0.1); }
 
-        /* --- ZSEBRADAR STÍLUSOK (Dinamikus Zöld/Piros) --- */
+        /* --- KÖZÖS CSATATÉR ZSEBRADAR STÍLUSOK --- */
         #pocket-radar {
             position: fixed; bottom: -360px; left: 50%; transform: translateX(-50%);
             width: 360px; height: 390px; background: rgba(0, 15, 0, 0.95);
@@ -72,20 +72,28 @@
         #radar-handle:hover { background: #005500; }
         
         #radar-content { position: relative; padding: 15px; display: flex; justify-content: center; align-items: center; overflow: hidden; height: 350px; }
+        
         #radar-grid {
             display: grid; grid-template-columns: repeat(20, 15px); grid-template-rows: repeat(20, 15px);
             gap: 1px; background: #002200; border: 2px solid #0f0; position: relative; z-index: 2; 
         }
         
-        /* Cella interakciók (Zöld mód) */
+        /* Cella interakciók és Térfelek */
         .radar-cell { background: rgba(0, 255, 0, 0.05); cursor: crosshair; }
-        .radar-cell:hover { background: rgba(0, 255, 0, 0.6); }
-        .radar-cell.miss { background: #555; cursor: not-allowed; }
+        
+        /* Ellenség térfele (Felső rész) */
+        .radar-cell.enemy-territory:hover { background: rgba(0, 255, 0, 0.6); }
         .radar-cell.hit { background: #f55; cursor: not-allowed; }
+        .radar-cell.miss { background: #555; cursor: not-allowed; }
 
-        .radar-crosshair-x, .radar-crosshair-y { position: absolute; background: rgba(0, 255, 0, 0.8); pointer-events: none; z-index: 3; }
-        .radar-crosshair-x { top: 50%; left: 25px; right: 25px; height: 2px; transform: translateY(-50%); box-shadow: 0 0 5px #0f0;}
-        .radar-crosshair-y { left: 50%; top: 25px; bottom: 25px; width: 2px; transform: translateX(-50%); box-shadow: 0 0 5px #0f0;}
+        /* Saját térfél (Alsó rész) */
+        .radar-cell.own-territory { border-top: 1px solid rgba(0, 255, 0, 0.1); cursor: default; }
+        .radar-cell.own-ship { background: rgba(0, 150, 255, 0.4); border: 1px solid #0ff; } /* Saját hajóink kékkel */
+        .radar-cell.hit-own { background: #ff0000; box-shadow: inset 0 0 8px #000; cursor: default; } /* Sérült saját hajó */
+        .radar-cell.miss-own { background: #444; cursor: default; } /* Ide lőtt az ellenfél, de mellé */
+
+        /* Határvonal a radaron */
+        .radar-crosshair-x { top: 50%; left: 0px; right: 0px; height: 2px; background: #0f0; transform: translateY(-50%); box-shadow: 0 0 8px #0f0; pointer-events: none; z-index: 3; position: absolute; }
 
         .radar-sweep {
             position: absolute; top: 50%; left: 50%; width: 450px; height: 450px;
@@ -99,9 +107,9 @@
         #pocket-radar.disabled #radar-handle { border-color: #f55; color: #f55; background: #330000; }
         #pocket-radar.disabled #radar-grid { border-color: #f55; }
         #pocket-radar.disabled .radar-sweep { background: conic-gradient(from 0deg, rgba(255,0,0,0) 70%, rgba(255,0,0,0.5) 100%); }
-        #pocket-radar.disabled .radar-crosshair-x, #pocket-radar.disabled .radar-crosshair-y { background: #f55; box-shadow: 0 0 5px #f00; }
-        #pocket-radar.disabled .radar-cell { cursor: not-allowed; }
-        #pocket-radar.disabled .radar-cell:hover:not(.hit):not(.miss) { background: rgba(255, 0, 0, 0.4); } /* Pirosan villan fel ha rámegy az egér */
+        #pocket-radar.disabled .radar-crosshair-x { background: #f55; box-shadow: 0 0 5px #f00; }
+        #pocket-radar.disabled .radar-cell.enemy-territory { cursor: not-allowed; }
+        #pocket-radar.disabled .radar-cell.enemy-territory:hover:not(.hit):not(.miss) { background: rgba(255, 0, 0, 0.4); } 
 
         /* --- GAME OVER MODAL --- */
         #game-over-modal {
@@ -130,17 +138,17 @@
         <h2>🚀 Torpedó Központ</h2>
         
         <div id="lobby-area">
-            <button id="createRoomBtn">Új szoba létrehozása (Host)</button>
+            <h3 id="status-display" style="color: orange; font-size: 14px; margin-bottom: 15px;">⏳ Szerver ébresztése...</h3>
+            <button id="createRoomBtn" disabled>Új szoba létrehozása (Host)</button>
             <div class="divider">VAGY</div>
             <input type="text" id="roomCodeInput" placeholder="KÓD" maxlength="5">
-            <button id="joinRoomBtn">Csatlakozás a szobához</button>
-            <h3 id="status-display" style="color: yellow; margin-top: 15px; font-size: 16px;"></h3>
+            <button id="joinRoomBtn" disabled>Csatlakozás a szobához</button>
         </div>
 
         <div id="planning-area">
             <h3 style="color: #0ff;">🛠️ Flotta elhelyezése</h3>
             <div class="instruction">
-                Egér mozgás: Célzás a rácson<br>
+                Egér mozgás: Célzás (CSAK A SAJÁT TÉRFÉLEN)<br>
                 Bal klikk: Hajó lerakása<br>
                 'R' gomb: Forgatás 90°-kal<br>
                 <b>Jobb klikk: Kamera forgatása</b>
@@ -169,7 +177,6 @@
         <div id="radar-content">
             <div id="radar-grid"></div>
             <div class="radar-crosshair-x"></div>
-            <div class="radar-crosshair-y"></div>
             <div class="radar-sweep"></div>
         </div>
     </div>
