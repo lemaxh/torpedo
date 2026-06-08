@@ -10,11 +10,14 @@ const enemyWatersGroup = new THREE.Group();
 scene.add(ownFleetGroup);
 scene.add(enemyWatersGroup);
 
-scene.fog = new THREE.FogExp2(0x111111, 0.04);
-
+// --- ÚJ KÖZÖS CSATATÉR BEÁLLÍTÁSOK ---
+// Kamera a Parancsnoki Hídon: Mögöttünk a flotta, előttünk a köd
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 15, 15); 
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 15, 18); 
+camera.lookAt(0, 0, -5); 
+
+// Valódi Ködfal az ellenség térfele felett
+scene.fog = new THREE.Fog(0x111111, 10, 25); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -24,6 +27,8 @@ canvasContainer.appendChild(renderer.domElement);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.enableDamping = true; 
+// Opcionális: korlátozhatod a kamerát, hogy ne menjen be a ködbe!
+controls.maxPolarAngle = Math.PI / 2 - 0.1; 
 
 const gridHelper = new THREE.GridHelper(20, 20, 0x00ff00, 0x003300);
 gridHelper.position.y = 0.01; 
@@ -35,6 +40,13 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
+// Fénylő Lézer/Bója a pálya közepén (Z=0), ami elválasztja a térfeleket
+const borderGeo = new THREE.BoxGeometry(20, 0.1, 0.1);
+const borderMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+const borderLine = new THREE.Mesh(borderGeo, borderMat);
+borderLine.position.set(0, 0.02, 0);
+scene.add(borderLine);
+
 const waterNormals = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/r128/examples/textures/waternormals.jpg');
 waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
 
@@ -42,13 +54,9 @@ const waterGeometry = new THREE.PlaneGeometry(1000, 1000);
 const water = new THREE.Water(
     waterGeometry,
     {
-        textureWidth: 512,
-        textureHeight: 512,
-        waterNormals: waterNormals,
+        textureWidth: 512, textureHeight: 512, waterNormals: waterNormals,
         sunDirection: directionalLight.position.clone().normalize(),
-        sunColor: 0xffffff,
-        waterColor: 0x001e0f, 
-        distortionScale: 8.0, 
+        sunColor: 0xffffff, waterColor: 0x001e0f, distortionScale: 8.0, 
         fog: scene.fog !== undefined
     }
 );
@@ -79,55 +87,31 @@ function createCinematicExplosion(x, z, isHit) {
         positions[i * 3 + 2] = z;
 
         let vx, vy, vz, color;
-
         if (isHit) {
-            vx = (Math.random() - 0.5) * 0.4;
-            vy = (Math.random() * 0.5) + 0.1;
-            vz = (Math.random() - 0.5) * 0.4;
-            
+            vx = (Math.random() - 0.5) * 0.4; vy = (Math.random() * 0.5) + 0.1; vz = (Math.random() - 0.5) * 0.4;
             const isSmoke = Math.random() > 0.5;
             color = isSmoke ? new THREE.Color(0x222222) : new THREE.Color(Math.random() > 0.5 ? 0xff4400 : 0xffaa00);
         } else {
-            vx = (Math.random() - 0.5) * 0.15; 
-            vy = (Math.random() * 0.8) + 0.2;  
-            vz = (Math.random() - 0.5) * 0.15;
+            vx = (Math.random() - 0.5) * 0.15; vy = (Math.random() * 0.8) + 0.2; vz = (Math.random() - 0.5) * 0.15;
             color = new THREE.Color(0xaaaaaa).lerp(new THREE.Color(0xffffff), Math.random());
         }
 
         velocities.push({ x: vx, y: vy, z: vz });
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
+        colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-        size: isHit ? 0.25 : 0.15,
-        vertexColors: true,
-        transparent: true,
-        opacity: 1.0,
-        blending: THREE.NormalBlending 
+        size: isHit ? 0.25 : 0.15, vertexColors: true, transparent: true, opacity: 1.0, blending: THREE.NormalBlending 
     });
 
     const particleSystem = new THREE.Points(geometry, material);
-    enemyWatersGroup.add(particleSystem); 
+    scene.add(particleSystem); // A közös scene-be tesszük
 
     const decayRate = isHit ? 0.008 : 0.02;
     particlesArray.push({ system: particleSystem, velocities: velocities, life: 1.0, decay: decayRate });
-}
-
-function createGridMarker(x, z, isHit) {
-    const planeGeo = new THREE.PlaneGeometry(1, 1);
-    const planeMat = new THREE.MeshBasicMaterial({ 
-        color: isHit ? 0xff0000 : 0x444444, 
-        transparent: true, opacity: 0.6, side: THREE.DoubleSide
-    });
-    const marker = new THREE.Mesh(planeGeo, planeMat);
-    marker.rotation.x = -Math.PI / 2;
-    marker.position.set(x, 0.05, z); 
-    ownFleetGroup.add(marker);
 }
 
 /**
@@ -135,12 +119,13 @@ function createGridMarker(x, z, isHit) {
  */
 const loader = new THREE.GLTFLoader();
 
+// A hajók alapértelmezett pozícióit lejjebb toltuk (Z > 0), hogy egyből a saját térfelen kezdjenek
 const shipConfig = [
-    { file: '2helyes.glb', length: 2, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -3.95, posY: 1.20, posZ: -0.40 },
-    { file: '3helyes1.glb', length: 3, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -2.15, posY: 1.20, posZ: -0.20 },
-    { file: '3helyes2.glb', length: 3, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 3.95, posY: 1.20, posZ: -0.20 },
-    { file: '4helyes.glb', length: 4, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 2.35, posY: 1.20, posZ: 0.00 },
-    { file: '5helyes.glb', length: 5, scale: 0.10, rotX: 0, rotY: Math.PI * (90/180), rotZ: 0, posX: -0.25, posY: 1.20, posZ: 0.10 }
+    { file: '2helyes.glb', length: 2, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -3.95, posY: 1.20, posZ: 2.50 },
+    { file: '3helyes1.glb', length: 3, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: -2.15, posY: 1.20, posZ: 4.50 },
+    { file: '3helyes2.glb', length: 3, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 3.95, posY: 1.20, posZ: 6.50 },
+    { file: '4helyes.glb', length: 4, scale: 0.10, rotX: Math.PI * (90/180), rotY: 0, rotZ: Math.PI * (90/180), posX: 2.35, posY: 1.20, posZ: 3.00 },
+    { file: '5helyes.glb', length: 5, scale: 0.10, rotX: 0, rotY: Math.PI * (90/180), rotZ: 0, posX: -0.25, posY: 1.20, posZ: 5.10 }
 ];
 
 let loadedModels = []; 
@@ -175,18 +160,12 @@ Promise.all(shipConfig.map(config => {
             model.scale.set(config.scale, config.scale, config.scale);
             model.rotation.set(config.rotX, config.rotY, config.rotZ);
             model.position.set(config.posX, config.posY, config.posZ);
-            
-            model.traverse((child) => {
-                if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 });
-            });
-            const wrapper = new THREE.Group();
-            wrapper.add(model);
-            resolve(wrapper);
+            model.traverse((child) => { if (child.isMesh) child.material = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, metalness: 0.3 }); });
+            const wrapper = new THREE.Group(); wrapper.add(model); resolve(wrapper);
         });
     });
 })).then(models => {
-    loadedModels = models;
-    updateGhostShip(); 
+    loadedModels = models; updateGhostShip(); 
 });
 
 function updateGhostShip() {
@@ -196,9 +175,7 @@ function updateGhostShip() {
         modelClone.traverse((child) => {
             if (child.isMesh) {
                 child.material = child.material.clone();
-                child.material.transparent = true;
-                child.material.opacity = 0.6;
-                child.material.color.setHex(0x00ffff); 
+                child.material.transparent = true; child.material.opacity = 0.6; child.material.color.setHex(0x00ffff); 
             }
         });
         ghostShip.add(modelClone);
@@ -208,17 +185,15 @@ function updateGhostShip() {
 const targetGeometry = new THREE.RingGeometry(0.3, 0.5, 16);
 const targetMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
 const targetReticle = new THREE.Mesh(targetGeometry, targetMaterial);
-targetReticle.rotation.x = -Math.PI / 2; 
-targetReticle.position.y = 0.1; 
-targetReticle.visible = false;
-enemyWatersGroup.add(targetReticle); 
+targetReticle.rotation.x = -Math.PI / 2; targetReticle.position.y = 0.1; targetReticle.visible = false;
+scene.add(targetReticle); 
 
 let isPlanningPhase = false;
 let isPlayingPhase = false;
 let isMyTurn = false; 
 const placedShips = [];
 const maxShips = 5;
-const myShotsOnRadar = {}; 
+let radarMap = {}; // A közös térkép tárolója
 
 // --- ANIMÁCIÓS CIKLUS ---
 function animate() {
@@ -226,50 +201,32 @@ function animate() {
     controls.update(); 
     
     const delta = clock.getDelta();
-
-    if (water !== undefined && water.material.uniforms !== undefined) {
-        water.material.uniforms['time'].value += delta; 
-    }
+    if (water !== undefined && water.material.uniforms !== undefined) water.material.uniforms['time'].value += delta; 
 
     for (let i = particlesArray.length - 1; i >= 0; i--) {
         let pObj = particlesArray[i];
         let positions = pObj.system.geometry.attributes.position.array;
-
         pObj.life -= pObj.decay; 
         pObj.system.material.opacity = pObj.life;
 
         for (let j = 0; j < pObj.velocities.length; j++) {
             pObj.velocities[j].y -= 0.005; 
-            
-            positions[j * 3] += pObj.velocities[j].x;
-            positions[j * 3 + 1] += pObj.velocities[j].y;
-            positions[j * 3 + 2] += pObj.velocities[j].z;
-            
+            positions[j * 3] += pObj.velocities[j].x; positions[j * 3 + 1] += pObj.velocities[j].y; positions[j * 3 + 2] += pObj.velocities[j].z;
             if (positions[j * 3 + 1] < 0) {
-                positions[j * 3 + 1] = 0;
-                pObj.velocities[j].x *= 0.8; 
-                pObj.velocities[j].z *= 0.8;
+                positions[j * 3 + 1] = 0; pObj.velocities[j].x *= 0.8; pObj.velocities[j].z *= 0.8;
             }
         }
-        
         pObj.system.geometry.attributes.position.needsUpdate = true;
-
         if (pObj.life <= 0) {
-            enemyWatersGroup.remove(pObj.system);
-            pObj.system.geometry.dispose();
-            pObj.system.material.dispose();
-            particlesArray.splice(i, 1);
+            scene.remove(pObj.system); pObj.system.geometry.dispose(); pObj.system.material.dispose(); particlesArray.splice(i, 1);
         }
     }
-
     renderer.render(scene, camera);
 }
 animate();
 
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 /**
@@ -289,28 +246,24 @@ const shipCountSpan = document.getElementById('ship-count');
 const readyBtn = document.getElementById('readyBtn');
 const turnIndicator = document.getElementById('turn-indicator');
 
-// Belső nézetváltó funkció (A GOMBOKTÓL FÜGGETLENÜL MEGHAGYVA, mert az animáció ezt hívja)
-function switchView(view) {
-    if (view === 'defensive') {
-        scene.fog = new THREE.FogExp2(0x111111, 0.04);
-        renderer.setClearColor(0x111111);
-        ownFleetGroup.visible = true;
-        enemyWatersGroup.visible = false;
-    } else if (view === 'offensive') {
-        scene.fog = new THREE.FogExp2(0xdddddd, 0.06); 
-        renderer.setClearColor(0xdddddd);
-        ownFleetGroup.visible = false;
-        enemyWatersGroup.visible = true;
-    }
+function logMessage(msg, type = 'system') {
+    const p = document.createElement('p'); p.innerHTML = msg; p.className = type; logDiv.prepend(p);
 }
 
-function logMessage(msg, type = 'system') {
-    const p = document.createElement('p');
-    p.innerHTML = msg; p.className = type; logDiv.prepend(p);
-}
+// --- SZERVER KAPCSOLAT ÁLLAPOTJELZŐ ---
+socket.on('connect', () => {
+    statusDisplay.innerText = "✅ Szerver elérhető! Készen áll a parancsokra.";
+    statusDisplay.style.color = "#0f0";
+    createRoomBtn.disabled = false; joinRoomBtn.disabled = false;
+});
+socket.on('disconnect', () => {
+    statusDisplay.innerText = "❌ Kapcsolat megszakadt a szerverrel!";
+    statusDisplay.style.color = "red";
+    createRoomBtn.disabled = true; joinRoomBtn.disabled = true;
+});
 
 /**
- * --- ZSEBRADAR LOGIKA (KAPCSOLÓ ÉS GENERÁLÁS) ---
+ * --- ZSEBRADAR LOGIKA (KÖZÖS TÉRKÉP ALAPJÁN) ---
  */
 const pocketRadar = document.getElementById('pocket-radar');
 const radarHandle = document.getElementById('radar-handle');
@@ -332,29 +285,46 @@ radarHandle.addEventListener('click', () => {
 function buildRadarGrid() {
     const radarGrid = document.getElementById('radar-grid');
     radarGrid.innerHTML = '';
+    
+    // Kiszámoljuk, melyik cellákban vannak a TE hajóid
+    const myShipCells = new Set();
+    placedShips.forEach(ship => {
+        const isRotated = Math.abs(ship.rotationY % Math.PI) > 0.1;
+        for (let i = 0; i < ship.length; i++) {
+            const offset = - (ship.length / 2) + 0.5 + i;
+            let cx = ship.x + (isRotated ? offset : 0);
+            let cz = ship.z + (isRotated ? 0 : offset);
+            myShipCells.add(`${(Math.floor(cx)+0.5).toFixed(1)},${(Math.floor(cz)+0.5).toFixed(1)}`);
+        }
+    });
+
     for (let z = -10; z < 10; z++) {
         for (let x = -10; x < 10; x++) {
             const cell = document.createElement('div');
             cell.className = 'radar-cell';
-            const snappedX = x + 0.5;
-            const snappedZ = z + 0.5;
+            const snappedX = x + 0.5; const snappedZ = z + 0.5;
+            const cellKey = `${snappedX.toFixed(1)},${snappedZ.toFixed(1)}`;
             
-            const cellKey = `${snappedX},${snappedZ}`;
-            if (myShotsOnRadar[cellKey] === 'hit') cell.classList.add('hit');
-            else if (myShotsOnRadar[cellKey] === 'miss') cell.classList.add('miss');
-
-            cell.addEventListener('click', () => {
-                // Biztonsági blokk: Csak a saját körödben lőhetsz (már hibaüzenet nélkül, némán letiltva)
-                if (!isMyTurn) return; 
-                if (myShotsOnRadar[cellKey]) return; 
-
-                // Lövés elküldése
-                socket.emit('shoot', { x: snappedX, z: snappedZ });
+            if (snappedZ > 0) {
+                // SAJÁT TÉRFÉL (Lent)
+                cell.classList.add('own-territory');
+                if (myShipCells.has(cellKey)) cell.classList.add('own-ship');
                 
-                // Radar visszacsukása automatikusan
-                pocketRadar.classList.remove('open');
-                updateRadarHandleText();
-            });
+                if (radarMap[cellKey] === 'enemy-hit') cell.classList.add('hit-own');
+                else if (radarMap[cellKey] === 'enemy-miss') cell.classList.add('miss-own');
+            } else {
+                // ELLENSÉG TÉRFÉLE (Fent)
+                cell.classList.add('enemy-territory');
+                if (radarMap[cellKey] === 'hit') cell.classList.add('hit');
+                else if (radarMap[cellKey] === 'miss') cell.classList.add('miss');
+                
+                cell.addEventListener('click', () => {
+                    if (!isMyTurn || radarMap[cellKey]) return; 
+                    socket.emit('shoot', { x: snappedX, z: snappedZ });
+                    pocketRadar.classList.remove('open');
+                    updateRadarHandleText();
+                });
+            }
             radarGrid.appendChild(cell);
         }
     }
@@ -363,16 +333,13 @@ function buildRadarGrid() {
 /**
  * --- GAME OVER GOMBOK ---
  */
-document.getElementById('rematchBtn').addEventListener('click', () => {
-    window.location.reload(); // A legtisztább megoldás az új körhöz: frissíti az oldalt
-});
+document.getElementById('rematchBtn').addEventListener('click', () => { window.location.reload(); });
 document.getElementById('exitBtn').addEventListener('click', () => {
-    // Üres képernyőt hagyunk vissza, mintha kilépett volna a játékból
     document.body.innerHTML = "<h1 style='text-align:center; margin-top:20%; color:#0f0;'>Sikeresen kiléptél a Parancsnokságról.</h1>";
 });
 
 /**
- * --- 3. JÁTÉKOS INTERAKCIÓK (Egér pakolás) ---
+ * --- 3. JÁTÉKOS INTERAKCIÓK (Egér pakolás CSAK SAJÁT TÉRFÉLRE) ---
  */
 window.addEventListener('mousemove', (event) => {
     if (!isPlanningPhase) return;
@@ -385,7 +352,9 @@ window.addEventListener('mousemove', (event) => {
 
     const snappedX = Math.floor(planeIntersect.x) + 0.5;
     const snappedZ = Math.floor(planeIntersect.z) + 0.5;
-    const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
+    
+    // FIGYELEM: Csak a saját térfélre lehet lerakni (Z > 0)
+    const isOutOfBounds = Math.abs(snappedX) > 10 || snappedZ <= 0 || snappedZ > 10;
 
     if (currentShipIndex < maxShips) {
         ghostShip.position.x = snappedX; ghostShip.position.z = snappedZ; ghostShip.position.y = 0; 
@@ -403,7 +372,7 @@ window.addEventListener('keydown', (event) => {
         ghostShip.rotation.y += Math.PI / 2; 
         const snappedX = ghostShip.position.x; const snappedZ = ghostShip.position.z;
         const length = shipConfig[currentShipIndex].length;
-        const isOutOfBounds = Math.abs(snappedX) > 10 || Math.abs(snappedZ) > 10;
+        const isOutOfBounds = Math.abs(snappedX) > 10 || snappedZ <= 0 || snappedZ > 10;
         canPlaceCurrentShip = !checkOverlap(snappedX, snappedZ, ghostShip.rotation.y, length) && !isOutOfBounds;
         
         ghostShip.traverse((child) => {
@@ -419,8 +388,7 @@ window.addEventListener('click', (event) => {
         if (!canPlaceCurrentShip) { logMessage("❌ Érvénytelen pozíció!", "enemy"); return; }
 
         const solidShip = loadedModels[currentShipIndex].clone();
-        solidShip.position.copy(ghostShip.position);
-        solidShip.rotation.copy(ghostShip.rotation);
+        solidShip.position.copy(ghostShip.position); solidShip.rotation.copy(ghostShip.rotation);
         ownFleetGroup.add(solidShip);
         
         placedShips.push({ 
@@ -441,36 +409,7 @@ window.addEventListener('click', (event) => {
 /**
  * --- 4. HÁLÓZATI ESEMÉNYEK ---
  */
-/**
- * --- 4. HÁLÓZATI ESEMÉNYEK (ÉS SZERVER KAPCSOLAT) ---
- */
-
-// ALAPÉRTELMEZETT: Gombok letiltása, amíg nincs kapcsolat
-createRoomBtn.disabled = true;
-joinRoomBtn.disabled = true;
-statusDisplay.innerText = "⏳ Szerver ébresztése... (Akár 30-50 mp is lehet)";
-statusDisplay.style.color = "orange";
-
-// HA SIKERESEN CSATLAKOZOTT A SOCKET.IO
-socket.on('connect', () => {
-    statusDisplay.innerText = "✅ Szerver elérhető! Készen áll a parancsokra.";
-    statusDisplay.style.color = "#0f0";
-    createRoomBtn.disabled = false;
-    joinRoomBtn.disabled = false;
-});
-
-// HA MEGSZAKAD A KAPCSOLAT
-socket.on('disconnect', () => {
-    statusDisplay.innerText = "❌ Kapcsolat megszakadt a szerverrel!";
-    statusDisplay.style.color = "red";
-    createRoomBtn.disabled = true;
-    joinRoomBtn.disabled = true;
-});
-
-createRoomBtn.addEventListener('click', () => { 
-    socket.emit('create_room'); 
-});
-
+createRoomBtn.addEventListener('click', () => { socket.emit('create_room'); });
 joinRoomBtn.addEventListener('click', () => {
     const code = roomCodeInput.value.trim().toUpperCase();
     if (code.length > 0) socket.emit('join_room', code);
@@ -486,7 +425,6 @@ socket.on('room_joined', (code) => { statusDisplay.innerText = `Csatlakozva: ${c
 socket.on('game_start', (msg) => {
     logMessage(`[Parancsnokság] ${msg}`, 'system');
     lobbyArea.style.display = 'none'; planningArea.style.display = 'block';
-    switchView('defensive');
     if (loadedModels.length > 0) { isPlanningPhase = true; ghostShip.visible = true; }
 });
 
@@ -495,17 +433,13 @@ socket.on('battle_begins', (msg) => {
     gameArea.style.display = 'block'; isPlayingPhase = true;
 });
 
-// KÖR FRISSÍTÉSE: Vizuális Zöld/Piros módosítók a radaron
 socket.on('turn_update', (activePlayerId) => {
     isMyTurn = (activePlayerId === socket.id);
-    
     if (isMyTurn) {
-        turnIndicator.className = 'turn-status my-turn';
-        turnIndicator.innerText = "🟢 TE JÖSSZ! Tűzparancs engedélyezve.";
+        turnIndicator.className = 'turn-status my-turn'; turnIndicator.innerText = "🟢 TE JÖSSZ! Tűzparancs engedélyezve.";
         if (pocketRadar) pocketRadar.classList.remove('disabled');
     } else {
-        turnIndicator.className = 'turn-status enemy-turn';
-        turnIndicator.innerText = "🔴 ELLENFÉL KÖRE... Készülj a becsapódásra!";
+        turnIndicator.className = 'turn-status enemy-turn'; turnIndicator.innerText = "🔴 ELLENFÉL KÖRE... Készülj a becsapódásra!";
         if (pocketRadar) pocketRadar.classList.add('disabled');
     }
     updateRadarHandleText();
@@ -514,39 +448,40 @@ socket.on('turn_update', (activePlayerId) => {
 socket.on('shot_result', (data) => {
     const isMe = (data.shooter === socket.id);
     
+    // TÜKRÖZÉS A KLIENSNÉL (Ha az ellenfél lőtt, az ő koordinátáit visszaforgatjuk a mi térfelünkre)
+    const renderX = isMe ? data.originalX : -data.originalX;
+    const renderZ = isMe ? data.originalZ : -data.originalZ;
+    const cellKey = `${renderX.toFixed(1)},${renderZ.toFixed(1)}`;
+    
     if (isMe) {
-        myShotsOnRadar[`${data.x},${data.z}`] = data.hit ? 'hit' : 'miss';
-        
-        switchView('offensive'); 
-        targetReticle.position.set(data.x, 0.1, data.z); targetReticle.visible = true;
-        
-        createCinematicExplosion(data.x, data.z, data.hit);
-        if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${data.x}, Z:${data.z})`, 'hit');
-        else logMessage(`💦 Mellé. Csobbanás a tengerben. (X:${data.x}, Z:${data.z})`, 'system');
+        radarMap[cellKey] = data.hit ? 'hit' : 'miss';
+        if (data.hit) logMessage(`🔥 CÉL TALÁLVA! Bumm! (X:${renderX}, Z:${renderZ})`, 'hit');
+        else logMessage(`💦 Mellé. Csobbanás a tengerben.`, 'system');
         if (data.sunk) logMessage(`☠️ TALÁLT, SÜLLYEDT! Egy ellenséges hajó megsemmisült!`, 'hit');
-
-        setTimeout(() => { switchView('defensive'); targetReticle.visible = false; }, 3000);
-
     } else {
-        createGridMarker(data.x, data.z, data.hit);
-        if (data.hit) logMessage(`⚠️ FIGYELEM! Eltalálták egy hajónkat! (X:${data.x}, Z:${data.z})`, 'enemy');
-        else logMessage(`Közel volt... Az ellenfél mellélőtt. (X:${data.x}, Z:${data.z})`, 'system');
+        radarMap[cellKey] = data.hit ? 'enemy-hit' : 'enemy-miss';
+        if (data.hit) logMessage(`⚠️ FIGYELEM! Eltalálták egy hajónkat!`, 'enemy');
+        else logMessage(`Közel volt... Az ellenfél mellélőtt.`, 'system');
         if (data.sunk) logMessage(`🚨 KATASZTRÓFA! Elvesztettünk egy hajót!`, 'enemy');
     }
 
-    // GAME OVER LEKEZELÉS (Késleltetve, hogy a mozis nézet befejeződhessen)
+    // A MOZIS ROBBANÁS a közös 3D térben!
+    targetReticle.position.set(renderX, 0.1, renderZ); targetReticle.visible = true;
+    createCinematicExplosion(renderX, renderZ, data.hit);
+    setTimeout(() => { targetReticle.visible = false; }, 3000);
+    
+    // Frissíti a nyitott radart, hogy egyből látszódjon a sérülés
+    if (pocketRadar.classList.contains('open')) buildRadarGrid();
+
+    // GAME OVER LEKEZELÉS 
     if (data.gameOver) {
-        isPlayingPhase = false;
-        isMyTurn = false;
+        isPlayingPhase = false; isMyTurn = false;
         if (pocketRadar) pocketRadar.classList.add('disabled');
 
-        const delay = isMe ? 3500 : 1000; // Ha én lőttem, megvárjuk amíg a kamera visszatér
-        
         setTimeout(() => {
             const modal = document.getElementById('game-over-modal');
             const title = document.getElementById('game-over-title');
             const msg = document.getElementById('game-over-message');
-            
             modal.style.display = 'block';
             
             if (isMe) {
@@ -558,13 +493,11 @@ socket.on('shot_result', (data) => {
                 modal.className = 'defeat'; title.innerText = "💀 VERESÉG!"; title.style.color = "#f55";
                 msg.innerText = "Sajnálom Parancsnok, a flottánk odaveszett.";
             }
-        }, delay);
+        }, 1500);
     }
 });
 
 socket.on('enemy_disconnected', (msg) => {
-    logMessage(`🔌 ${msg}`, 'enemy');
-    alert("Az ellenfél feladta/kilépett a játékból.");
+    logMessage(`🔌 ${msg}`, 'enemy'); alert("Az ellenfél feladta/kilépett a játékból.");
 });
-
 socket.on('error_msg', (msg) => alert(`Hiba: ${msg}`));
