@@ -29,7 +29,7 @@ app.get('/monitor', (req, res) => {
   res.send(html);
 });
 
-// Ütközésvizsgálat (Visszaadja a meglőtt hajó indexét, ami a HP számoláshoz kell)
+// Ütközésvizsgálat (Visszaadja a meglőtt hajó indexét)
 function checkHitIndex(shot, ships) {
   for (let i = 0; i < ships.length; i++) {
     let ship = ships[i];
@@ -60,11 +60,8 @@ io.on('connection', (socket) => {
     currentRoom = roomCode;
     
     activeRooms[roomCode] = {
-      status: 'waiting',
-      players: [socket.id],
-      currentTurn: null, 
-      p1_shots: 0, p2_shots: 0,
-      p1_ready: false, p2_ready: false,
+      status: 'waiting', players: [socket.id], currentTurn: null, 
+      p1_shots: 0, p2_shots: 0, p1_ready: false, p2_ready: false,
       p1_ships: [], p2_ships: []
     };
     
@@ -73,14 +70,10 @@ io.on('connection', (socket) => {
 
   socket.on('join_room', (roomCode) => {
     if (activeRooms[roomCode] && activeRooms[roomCode].status === 'waiting') {
-      socket.join(roomCode);
-      currentRoom = roomCode;
-      
-      activeRooms[roomCode].players.push(socket.id);
-      activeRooms[roomCode].status = 'planning'; 
-      
+      socket.join(roomCode); currentRoom = roomCode;
+      activeRooms[roomCode].players.push(socket.id); activeRooms[roomCode].status = 'planning'; 
       socket.emit('room_joined', roomCode);
-      io.to(roomCode).emit('game_start', 'Kezdődhet a hajók lepakolása (Tervezési fázis).');
+      io.to(roomCode).emit('game_start', 'Kezdődhet a hajók lepakolása a te térfeledre (Alsó rész).');
     } else {
       socket.emit('error_msg', 'Nincs ilyen kódú szoba, vagy már tele van!');
     }
@@ -91,17 +84,13 @@ io.on('connection', (socket) => {
       const room = activeRooms[currentRoom];
       
       if (room.players[0] === socket.id) {
-        room.p1_ready = true;
-        room.p1_ships = ships;
+        room.p1_ready = true; room.p1_ships = ships;
       } else {
-        room.p2_ready = true;
-        room.p2_ships = ships;
+        room.p2_ready = true; room.p2_ships = ships;
       }
 
       if (room.p1_ready && room.p2_ready) {
-        room.status = 'playing';
-        room.currentTurn = room.players[0]; // P1 kezd mindig
-        
+        room.status = 'playing'; room.currentTurn = room.players[0]; 
         io.to(currentRoom).emit('battle_begins', 'Mindkét flotta készen áll! Kezdődik a harc!');
         io.to(currentRoom).emit('turn_update', room.currentTurn);
       }
@@ -112,20 +101,16 @@ io.on('connection', (socket) => {
     if (currentRoom && activeRooms[currentRoom]) {
       const room = activeRooms[currentRoom];
       
-      // BIZTONSÁG: Csak az lőhet, aki következik
       if (room.currentTurn !== socket.id) return;
 
-      let targetShips = [];
-      
-      if (room.players[0] === socket.id) {
-        room.p1_shots++;
-        targetShips = room.p2_ships;
-      } else {
-        room.p2_shots++;
-        targetShips = room.p1_ships;
-      }
+      let targetShips = (room.players[0] === socket.id) ? room.p2_ships : room.p1_ships;
 
-      const hitIndex = checkHitIndex(data, targetShips);
+      // TÜKRÖZÉS VARÁZSLAT: Mivel egymással szemben vagytok a pályán, elforgatjuk a lövést 180 fokkal a matekhoz!
+      const targetX = -data.x;
+      const targetZ = -data.z;
+
+      const hitIndex = checkHitIndex({ x: targetX, z: targetZ }, targetShips);
+      
       const isHit = (hitIndex !== -1);
       let isSunk = false;
       let gameOver = false;
@@ -133,20 +118,20 @@ io.on('connection', (socket) => {
       if (isHit) {
         targetShips[hitIndex].hp -= 1;
         if (targetShips[hitIndex].hp <= 0) {
-          isSunk = true;
-          targetShips[hitIndex].hp = 0;
+          isSunk = true; targetShips[hitIndex].hp = 0;
         }
       }
 
       const aliveShips = targetShips.filter(ship => ship.hp > 0).length;
       if (aliveShips === 0) gameOver = true;
 
-      // Kör átadása a másik játékosnak
+      // Kör átadása
       room.currentTurn = (room.players[0] === socket.id) ? room.players[1] : room.players[0];
 
+      // KIKÜLDÉS (Az eredeti adatokat küldjük vissza, mert a kliensek már maguknak forgatják)
       io.to(currentRoom).emit('shot_result', {
-        x: data.x,
-        z: data.z,
+        originalX: data.x, 
+        originalZ: data.z,
         hit: isHit,
         sunk: isSunk,
         gameOver: gameOver,
